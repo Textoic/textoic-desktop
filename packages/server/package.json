@@ -1,0 +1,30 @@
+{
+  "name": "@textoic/server",
+  "version": "0.1.0",
+  "description": "HTTP + WebSocket API around @textoic/core, and the standalone Textoic app launcher.",
+  "type": "module",
+  "files": ["dist"],
+  "bin": { "textoic": "./dist/bin.js" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "tsx watch src/bin.ts",
+    "test": "node --test --import tsx/esm test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@textoic/core": "workspace:*",
+    "@textoic/lsp": "workspace:*",
+    "hono": "4.13.7",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "@types/ws": "8.18.1",
+    "tsx": "4.20.3",
+    "typescript": "5.9.3"
+  }
+}

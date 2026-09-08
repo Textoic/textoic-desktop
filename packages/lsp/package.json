@@ -1,0 +1,29 @@
+{
+  "name": "@textoic/lsp",
+  "version": "0.1.0",
+  "description": "Language server exposing Textoic's style linter as LSP diagnostics and quick fixes, over stdio or WebSocket.",
+  "type": "module",
+  "files": ["dist"],
+  "bin": { "textoic-lsp": "./dist/stdio.js" },
+  "exports": {
+    ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" }
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test --import tsx/esm test/**/*.test.ts"
+  },
+  "dependencies": {
+    "@textoic/core": "workspace:*",
+    "vscode-jsonrpc": "9.0.2",
+    "vscode-languageserver": "10.1.1",
+    "vscode-languageserver-textdocument": "1.0.14",
+    "ws": "8.21.3"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "@types/ws": "8.18.1",
+    "tsx": "4.20.3",
+    "typescript": "5.9.3"
+  }
+}

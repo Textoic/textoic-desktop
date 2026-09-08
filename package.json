@@ -1,0 +1,22 @@
+{
+  "name": "textoic",
+  "version": "0.1.0",
+  "private": true,
+  "description": "AI-assisted writing and editing platform with a live style linter, deep research and fact-checking.",
+  "type": "module",
+  "engines": { "node": ">=22.0.0" },
+  "packageManager": "pnpm@9.14.4",
+  "scripts": {
+    "build": "pnpm -r --filter ./packages/core --filter ./packages/lsp --filter ./packages/server run build && pnpm --filter ./packages/web run build",
+    "dev": "pnpm --filter ./packages/server run dev",
+    "dev:web": "pnpm --filter ./packages/web run dev",
+    "start": "node packages/server/dist/bin.js",
+    "test": "pnpm -r --filter ./packages/core --filter ./packages/lsp --filter ./packages/server run test",
+    "typecheck": "pnpm -r run typecheck"
+  },
+  "devDependencies": {
+    "@types/node": "22.18.1",
+    "tsx": "4.20.3",
+    "typescript": "5.9.3"
+  }
+}
