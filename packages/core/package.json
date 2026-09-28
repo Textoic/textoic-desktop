@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "description": "Textoic engine: sessions, audit log, providers, context engine, style lint, templates, research and fact-checking.",
   "type": "module",
-  "files": ["dist", "assets"],
+  "files": ["dist"],
   "exports": {
     ".": { "types": "./dist/index.d.ts", "default": "./dist/index.js" },
     "./types": { "types": "./dist/types.d.ts", "default": "./dist/types.js" }
@@ -16,9 +16,9 @@
   "dependencies": {
     "budget-researcher": "link:../../../deepresearch",
     "diff": "9.0.0",
-    "english-lint": "link:../../../english-lint",
     "mammoth": "1.12.2",
-    "nlp": "link:../../../nlp",
+    "@textoic/enlint": "^0.2.0",
+    "@textoic/enlint-lsp": "^0.1.0",
     "turndown": "7.2.4",
     "zod": "4.5.4"
   },

@@ -1,3 +1,7 @@
+import type { TextoicConfig } from "@textoic/enlint-lsp/config";
+
+export type { TextoicConfig };
+
 export type ProviderKind = "ollama" | "openrouter";
 
 export type ResearchEffort = "low" | "medium" | "high";
@@ -16,7 +20,7 @@ export interface Settings {
   searxngUrl: string;
   serperKey: string;
   lintIdleMs: number;
-  lintRules: Record<string, boolean>;
+  lint: TextoicConfig;
   pricingOverrides: Record<string, ModelPricing>;
   contextBudgetTokens: number;
   auditCoalesceMs: number;
@@ -253,6 +257,7 @@ export interface LintIssue {
   end: number;
   message: string;
   suggestions?: LintSuggestion[];
+  case?: string;
 }
 
 export interface Rewrite {

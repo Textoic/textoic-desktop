@@ -1,13 +1,14 @@
-# Textoic
+# Textoic Desktop
 
-Textoic is a writing and editing platform built around a live style linter and heavy, auditable AI assistance. You paste or generate text, the editor shows style problems as you type, and every AI action is estimated before it runs and recorded after it runs with its prompt, parameters, usage, cost and diff.
+Textoic Desktop is a writing and editing app built around a live style linter and heavy, auditable AI assistance. You paste or generate text, the editor shows style problems as you type, and every AI action is estimated before it runs and recorded after it runs with its prompt, parameters, usage, cost and diff.
 
 It runs as a self-hosted app on your machine, and every piece of it is a TypeScript library that a hosted product can import.
 
 ## What it does
 
 - **Sessions** group a text (or a chain of texts) with its context, research, fact-checks and audit log. Start blank and paste your own text, or start from a template: **tweet** (one idea, 280 characters), **article** (planned and drafted, 500 to 1,000 words) or **novel** (a structured blueprint you edit and approve, then a test chapter).
-- **Live style review** through a Language Server (LSP) wired to `nlp` and `english-lint`. The document is re-linted when you stop typing for four seconds, and only the paragraphs that changed are re-parsed. Quick fixes come from the linter's mechanical suggestions; "Rewrite with AI" hands the flagged passage and the style guide to the model and verifies the result with the linter before offering it.
+- **Live style review** through [enlint-lsp](https://github.com/Textoic/enlint-lsp), the language server shared with the VS Code extension and textoic.com, running [enlint](https://github.com/Textoic/enlint) over [artisan](https://github.com/Textoic/artisan) parses. The document is re-linted when you stop typing (750 ms by default), and only the paragraphs that changed are re-parsed. Quick fixes come from the linter's mechanical suggestions; "Rewrite with AI" hands the flagged passage and the style guide to the model and verifies the result with the linter before offering it.
+- **Your rules**: Settings lists every rule with a description and examples. Set each one's severity, or turn it off. For the rules built from lists of cases (bad words, "very X", "not X") you can ignore single cases, from the settings or straight from a flagged word's tooltip, so "very dirty" stops suggesting "filthy" without losing the rest of the rule.
 - **Context** for the model: upload files (`.md`, `.txt`, `.docx`, `.html`, code, data), paste text, index a whole folder or codebase, or import another session's context and documents. Everything is content-addressed, chunked and indexed once; sessions only hold references, so moving context between sessions costs nothing.
 - **Deep research** through the sibling `budget-researcher` engine (the `deepresearch` repo): pick the topic, a hard inference budget, the depth (low, medium, high) and the model, and the cited report becomes a context item.
 - **Fact-check**: claims are extracted from the document, evidence is retrieved from the session context, and each claim comes back supported, contradicted or unverifiable with the evidence that decided it, marked in the editor.
@@ -21,17 +22,16 @@ It runs as a self-hosted app on your machine, and every piece of it is a TypeScr
 ```
 packages/
   core/    @textoic/core   the engine: sessions, audit, providers, context engine, lint, templates, research, fact-check
-  lsp/     @textoic/lsp    the language server (stdio binary and WebSocket transport)
-  server/  @textoic/server HTTP + WebSocket API around core, and the `textoic` launcher
+  server/  @textoic/server HTTP API around core, the /lsp WebSocket (enlint-lsp), and the `textoic` launcher
   web/     @textoic/web    the editor UI (React + CodeMirror), served by the launcher
 docs/architecture.md       design decisions, trade-offs and what to read before changing things
 ```
 
-`@textoic/core` depends on three sibling repositories checked out next to this one: `../english-lint`, `../nlp` and `../deepresearch` (package name `budget-researcher`). They are linked, not vendored.
+`@textoic/core` takes the linter from npm (`@textoic/enlint`, `@textoic/enlint-lsp`) and links one sibling checkout: `../deepresearch` (package name `budget-researcher`), which is not public yet. Clone it next to this repository and run `pnpm build` there first.
 
 ## Running it
 
-Requirements: Node 22+, pnpm 9, the three sibling repos built (`npm run build` in `english-lint` and `nlp`, `pnpm build` in `deepresearch`), and either [Ollama](https://ollama.com) running locally or an OpenRouter key. Research needs a search backend: the SearXNG container from `deepresearch` (`docker compose up -d` there) or a Serper key.
+Requirements: Node 22+, pnpm 9, `../deepresearch` built (`pnpm build` there), and either [Ollama](https://ollama.com) running locally or an OpenRouter key. Research needs a search backend: the SearXNG container from `deepresearch` (`docker compose up -d` there) or a Serper key.
 
 ```sh
 pnpm install
@@ -51,7 +51,7 @@ Open Settings first: pick the provider and model. Ollama models are listed from 
 pnpm test
 ```
 
-Core tests run the real `nlp` parser and `english-lint` rules, and exercise sessions, audit coalescing, the context engine, every action (with a scripted fake provider), the novel pipeline and the fact-checker. The LSP test drives a real language-server connection over streams. The server test hits the HTTP API in-process.
+Core tests run the real `artisan` parser and `enlint` rules, and exercise sessions, audit coalescing, the context engine, every action (with a scripted fake provider), the novel pipeline and the fact-checker. The server tests hit the HTTP API in-process and drive the `/lsp` socket, including a settings change that re-lints an open document. The language server's own tests live in `enlint-lsp`.
 
 ## Using it as a library
 
@@ -67,7 +67,7 @@ const app = createApp({ engine });                            // a Hono app: mou
 
 ## Language server
 
-`packages/lsp/dist/stdio.js` (bin `textoic-lsp`) speaks LSP over stdio for editor plugins. The web UI uses the same server over the `/lsp` WebSocket. Diagnostics carry the rule id as `code` and the mechanical fixes in `data`; `textDocument/codeAction` returns them as quick fixes; `textoic/relint` forces an immediate lint; `textoic/lintStats` reports how many blocks were re-parsed.
+The server package hosts `@textoic/enlint-lsp` on the `/lsp` WebSocket and feeds it the lint config from settings; a settings change re-lints every open document. Diagnostics carry the rule id as `code` and `data: { rule, case?, fixes }`. The same server runs over stdio for editors (`npx enlint-lsp --stdio`); see its README for the protocol and the `textoic.config.json` format.
 
 ## Status and known limits
 

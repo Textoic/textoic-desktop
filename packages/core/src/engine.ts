@@ -35,6 +35,7 @@ export class Textoic {
   private readonly fetchFn: typeof fetch;
   private readonly factory: ProviderFactory;
   private cachedSettings: Settings | null = null;
+  private readonly settingsListeners = new Set<(settings: Settings) => void>();
 
   constructor(options: TextoicOptions = {}) {
     this.dataDir = resolve(options.dataDir ?? process.env.TEXTOIC_DATA ?? "data");
@@ -86,7 +87,13 @@ export class Textoic {
     const next = mergeSettings(current, cleaned);
     await this.storage.settings.set(next);
     this.cachedSettings = next;
+    this.settingsListeners.forEach((listener) => listener(next));
     return next;
+  }
+
+  onSettingsChange(listener: (settings: Settings) => void): () => void {
+    this.settingsListeners.add(listener);
+    return () => this.settingsListeners.delete(listener);
   }
 
   async models(kind?: ProviderKind): Promise<ModelInfo[]> {

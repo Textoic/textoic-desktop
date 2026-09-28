@@ -46,7 +46,28 @@ const theme = EditorView.theme({
   ".cm-diagnosticAction": { backgroundColor: "var(--accent)", borderRadius: "4px", padding: "2px 8px" },
 });
 
-export const toEditorDiagnostics = (view: EditorView | null, diagnostics: LspDiagnostic[]): EditorDiagnostic[] => {
+export interface DiagnosticHandlers {
+  onIgnoreCase?: (rule: string, key: string) => void;
+  onDisableRule?: (rule: string) => void;
+}
+
+const severities: Record<number, EditorDiagnostic["severity"]> = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
+
+const settingActions = (diagnostic: LspDiagnostic, handlers: DiagnosticHandlers): Action[] => {
+  const data = diagnostic.data;
+  if (!data) {
+    return [];
+  }
+
+  const ignore: Action[] =
+    data.case !== undefined && handlers.onIgnoreCase
+      ? [{ name: `Ignore "${data.case}"`, apply: () => handlers.onIgnoreCase?.(data.rule, data.case ?? "") }]
+      : [];
+  const disable: Action[] = handlers.onDisableRule ? [{ name: "Turn off rule", apply: () => handlers.onDisableRule?.(data.rule) }] : [];
+  return [...ignore, ...disable];
+};
+
+export const toEditorDiagnostics = (view: EditorView | null, diagnostics: LspDiagnostic[], handlers: DiagnosticHandlers = {}): EditorDiagnostic[] => {
   if (!view) {
     return [];
   }
@@ -60,14 +81,17 @@ export const toEditorDiagnostics = (view: EditorView | null, diagnostics: LspDia
     from: offset(diagnostic.range.start),
     to: offset(diagnostic.range.end),
     message: `${diagnostic.message}${diagnostic.code ? `  [${diagnostic.code}]` : ""}`,
-    severity: "warning",
+    severity: severities[diagnostic.severity ?? 2] ?? "warning",
     source: "style",
-    actions: (diagnostic.data?.fixes ?? []).slice(0, 4).map((fix) => ({
-      name: fix.text === "" ? "Delete" : `Use "${fix.text}"`,
-      apply: (editor: EditorView, _from: number, _to: number) => {
-        editor.dispatch({ changes: { from: fix.range[0], to: fix.range[1], insert: fix.text } });
-      },
-    })),
+    actions: [
+      ...(diagnostic.data?.fixes ?? []).slice(0, 4).map((fix) => ({
+        name: fix.text === "" ? "Delete" : `Use "${fix.text}"`,
+        apply: (editor: EditorView, _from: number, _to: number) => {
+          editor.dispatch({ changes: { from: fix.range[0], to: fix.range[1], insert: fix.text } });
+        },
+      })),
+      ...settingActions(diagnostic, handlers),
+    ],
   }));
 };
 

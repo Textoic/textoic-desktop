@@ -8,7 +8,7 @@ Read this before changing anything. It records why the system is shaped the way 
 web (React + CodeMirror)  ──HTTP /api──▶  server (Hono)  ──▶  core (Textoic engine)
         │                                   │                     ├── sessions + audit
         └────────WebSocket /lsp─────────────┘                     ├── context engine (store, BM25, digests, explorer, assembler)
-                                              lsp (vscode-languageserver)   ├── lint (nlp → english-lint, incremental)
+                                     enlint-lsp (shared server)     ├── lint (artisan → enlint, via enlint-lsp)
                                                                             ├── actions (runner, jobs, traces)
                                                                             ├── templates (tweet, article, novel)
                                                                             ├── research (budget-researcher adapter)
@@ -18,6 +18,14 @@ web (React + CodeMirror)  ──HTTP /api──▶  server (Hono)  ──▶  co
 `core` has no HTTP and no UI. `server` is a thin translation of core into routes and sockets. `web` only talks to `server`. A hosted product imports `core` and `server` and supplies its own `Storage` and `ProviderFactory`.
 
 ## Decisions
+
+### 2026-09-27 — linting moved to enlint-lsp; the app keeps the audited rewrite
+
+The Textoic family now has three editors (this app, the VS Code extension and textoic.com), and all three need the same linting, config and rewrite prompt. `packages/lsp`, `lint/incremental.ts`, `lint/parser.ts` and the Markdown masking moved to `@textoic/enlint-lsp`; `english-lint` and `nlp` became `@textoic/enlint` and `@textoic/artisan`. `LintService` is now a thin wrapper that resolves `settings.lint` and calls `lintText`.
+
+The rewrite keeps its own action because it must go through `ActionContext` for the cost estimate and the audit trace. It takes the prompt, passage bounds, answer cleaning and the accept/reject verdict from `@textoic/enlint-lsp/rewrite`, so the three editors judge a rewrite the same way.
+
+`settings.lintRules` (rule → boolean) became `settings.lint`, an eslint-style `TextoicConfig` with severities and ignored cases. `mergeSettings` converts a stored `lintRules` on load, so old data directories keep their choices. The LSP socket takes its config from settings rather than from the browser, and `Textoic.onSettingsChange` pushes each change into every open LSP session, which re-lints. The default idle delay dropped from 4,000 to 750 ms to match the other editors.
 
 ### 2026-09-08 — every AI action is an `ActionDefinition` with `estimate` and `run`
 

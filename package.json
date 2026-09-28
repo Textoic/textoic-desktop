@@ -1,17 +1,17 @@
 {
-  "name": "textoic",
+  "name": "textoic-desktop",
   "version": "0.1.0",
   "private": true,
-  "description": "AI-assisted writing and editing platform with a live style linter, deep research and fact-checking.",
+  "description": "Textoic Desktop: a local writing app with a live style linter, verified AI rewrites, deep research and fact-checking.",
   "type": "module",
   "engines": { "node": ">=22.0.0" },
   "packageManager": "pnpm@9.14.4",
   "scripts": {
-    "build": "pnpm -r --filter ./packages/core --filter ./packages/lsp --filter ./packages/server run build && pnpm --filter ./packages/web run build",
+    "build": "pnpm -r --filter ./packages/core --filter ./packages/server run build && pnpm --filter ./packages/web run build",
     "dev": "pnpm --filter ./packages/server run dev",
     "dev:web": "pnpm --filter ./packages/web run dev",
     "start": "node packages/server/dist/bin.js",
-    "test": "pnpm -r --filter ./packages/core --filter ./packages/lsp --filter ./packages/server run test",
+    "test": "pnpm -r --filter ./packages/core --filter ./packages/server run test",
     "typecheck": "pnpm -r run typecheck"
   },
   "devDependencies": {

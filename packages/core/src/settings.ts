@@ -1,4 +1,4 @@
-import type { Settings } from "./types.js";
+import type { Settings, TextoicConfig } from "./types.js";
 
 export const defaultSettings = (): Settings => ({
   provider: "ollama",
@@ -8,8 +8,8 @@ export const defaultSettings = (): Settings => ({
   openrouterKey: "",
   searxngUrl: "http://127.0.0.1:8080",
   serperKey: "",
-  lintIdleMs: 4000,
-  lintRules: {},
+  lintIdleMs: 750,
+  lint: {},
   pricingOverrides: {},
   contextBudgetTokens: 12000,
   auditCoalesceMs: 120000,
@@ -24,6 +24,21 @@ const numberOr = (value: unknown, fallback: number) =>
 
 const stringOr = (value: unknown, fallback: string) =>
   typeof value === "string" ? value : fallback;
+
+const fromLegacyRules = (rules: Record<string, unknown>): TextoicConfig => ({
+  rules: Object.fromEntries(
+    Object.entries(rules)
+      .filter(([, on]) => typeof on === "boolean")
+      .map(([rule, on]) => [rule, on ? "warn" : "off"]),
+  ),
+});
+
+const lintConfigOf = (source: Record<string, unknown>, base: TextoicConfig): TextoicConfig =>
+  isRecord(source.lint)
+    ? (source.lint as TextoicConfig)
+    : isRecord(source.lintRules)
+      ? fromLegacyRules(source.lintRules)
+      : base;
 
 export const mergeSettings = (
   base: Settings,
@@ -45,13 +60,7 @@ export const mergeSettings = (
     searxngUrl: stringOr(source.searxngUrl, base.searxngUrl).replace(/\/+$/u, ""),
     serperKey: stringOr(source.serperKey, base.serperKey),
     lintIdleMs: Math.max(250, Math.round(numberOr(source.lintIdleMs, base.lintIdleMs))),
-    lintRules: isRecord(source.lintRules)
-      ? Object.fromEntries(
-          Object.entries(source.lintRules).filter(
-            ([, on]) => typeof on === "boolean",
-          ),
-        ) as Record<string, boolean>
-      : base.lintRules,
+    lint: lintConfigOf(source, base.lint),
     pricingOverrides: isRecord(source.pricingOverrides)
       ? Object.fromEntries(
           Object.entries(source.pricingOverrides).flatMap(([key, value]) =>

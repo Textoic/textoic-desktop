@@ -1,64 +1,54 @@
-import { ErrorId, defaults } from "english-lint";
-import type { Config } from "english-lint/types";
+import { ruleCatalog } from "@textoic/enlint/catalog";
+import {
+  lintText,
+  resolveConfig,
+  toEnlintConfig,
+  type Parser,
+  type ResolvedConfig,
+} from "@textoic/enlint-lsp";
+import { loadParser } from "@textoic/enlint-lsp/node";
+import type { LintError } from "@textoic/enlint/types";
 import type { LintIssue, Settings } from "../types.js";
-import { DocumentLinter, lintOnce, type LintRun } from "./incremental.js";
-import { loadParser, type Parser } from "./parser.js";
 
-export const ruleIds = Object.values(ErrorId) as string[];
+export const ruleIds = ruleCatalog.map(({ id }) => id as string);
 
 export const ruleDefaults = (): Record<string, boolean> =>
-  Object.fromEntries(ruleIds.map((rule) => [rule, defaults[rule as ErrorId] === true]));
+  Object.fromEntries(ruleCatalog.map(({ id, enabledByDefault }) => [id, enabledByDefault]));
 
-export const configFrom = (rules: Record<string, boolean>): Config => ({
-  ...defaults,
-  ...Object.fromEntries(
-    Object.entries(rules).filter(([rule]) => ruleIds.includes(rule)),
-  ),
-});
+export const toIssues = (problems: LintError[]): LintIssue[] =>
+  problems.map(({ id, start, end, message, suggestions, case: key }) => ({
+    id,
+    start,
+    end,
+    message,
+    ...(suggestions ? { suggestions } : {}),
+    ...(key === undefined ? {} : { case: key }),
+  }));
+
+let sharedParser: Promise<Parser> | null = null;
+
+export const parser = (): Promise<Parser> => {
+  sharedParser ??= loadParser();
+  return sharedParser;
+};
 
 export class LintService {
   private readonly settings: () => Promise<Settings>;
-  private readonly linters = new Map<string, DocumentLinter>();
-  private parser: Parser | null = null;
 
   constructor(settings: () => Promise<Settings>) {
     this.settings = settings;
   }
 
-  async ready(): Promise<Parser> {
-    this.parser ??= await loadParser();
-    return this.parser;
+  ready(): Promise<Parser> {
+    return parser();
   }
 
-  async config(): Promise<Config> {
-    return configFrom((await this.settings()).lintRules);
+  async config(): Promise<ResolvedConfig> {
+    return resolveConfig((await this.settings()).lint);
   }
 
   async lint(text: string): Promise<LintIssue[]> {
-    const parser = await this.ready();
-    return lintOnce(parser, text, await this.config());
-  }
-
-  async linterFor(key: string): Promise<DocumentLinter> {
-    const parser = await this.ready();
-    const config = await this.config();
-    const existing = this.linters.get(key);
-    if (existing) {
-      existing.configure(config);
-      return existing;
-    }
-
-    const linter = new DocumentLinter(parser, config);
-    this.linters.set(key, linter);
-    return linter;
-  }
-
-  async lintIncremental(key: string, text: string): Promise<LintRun> {
-    const linter = await this.linterFor(key);
-    return linter.lint(text);
-  }
-
-  release(key: string) {
-    this.linters.delete(key);
+    const [parse, config] = await Promise.all([this.ready(), this.config()]);
+    return toIssues(lintText(parse, text, toEnlintConfig(config)));
   }
 }

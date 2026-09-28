@@ -41,7 +41,7 @@ const server = serve({ fetch: app.fetch, port, hostname: host }, (info) => {
 
 attachSockets(server as import("node:http").Server, engine, (message) => console.log(`[lsp] ${message}`));
 
-void engine.lint.ready().then(() => console.log("Style linter ready (nlp dictionary loaded)."));
+void engine.lint.ready().then(() => console.log("Style linter ready (artisan dictionary loaded)."));
 
 const shutdown = () => {
   server.close();

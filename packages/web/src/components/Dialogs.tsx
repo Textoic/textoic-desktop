@@ -1,4 +1,6 @@
 import type { CostEstimate, ModelInfo, ProviderKind, Rewrite, TemplateKind, TemplateSettings } from "@textoic/core/types";
+import type { TextoicConfig } from "@textoic/enlint-lsp/config";
+import { RulesEditor } from "./RulesEditor";
 import { useEffect, useState, type ReactNode } from "react";
 import { api, formatTokens, formatUsd, type RedactedSettings } from "../api";
 
@@ -116,8 +118,8 @@ export const NewSessionDialog = ({ promptMax, onClose, onCreate }: { promptMax: 
   );
 };
 
-export const SettingsDialog = ({ settings, rules, ruleDefaults, onClose, onSaved }: { settings: RedactedSettings; rules: string[]; ruleDefaults: Record<string, boolean>; onClose: () => void; onSaved: (settings: RedactedSettings) => void }) => {
-  const [draft, setDraft] = useState<Record<string, unknown>>({ ...settings, research: { ...settings.research }, lintRules: { ...settings.lintRules } });
+export const SettingsDialog = ({ settings, onClose, onSaved }: { settings: RedactedSettings; onClose: () => void; onSaved: (settings: RedactedSettings) => void }) => {
+  const [draft, setDraft] = useState<Record<string, unknown>>({ ...settings, research: { ...settings.research }, lint: settings.lint });
   const [models, setModels] = useState<ModelInfo[]>([]);
   const [modelsError, setModelsError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -137,7 +139,6 @@ export const SettingsDialog = ({ settings, rules, ruleDefaults, onClose, onSaved
   }, [provider]);
 
   const set = (key: string, value: unknown) => setDraft((current) => ({ ...current, [key]: value }));
-  const lintRules = draft.lintRules as Record<string, boolean>;
   const save = async () => {
     setBusy(true);
     try {
@@ -202,7 +203,7 @@ export const SettingsDialog = ({ settings, rules, ruleDefaults, onClose, onSaved
       <div className="row">
         <div className="field grow">
           <label>Re-lint after idle (ms)</label>
-          <input type="number" min={250} step={250} value={Number(draft.lintIdleMs ?? 4000)} onChange={(event) => set("lintIdleMs", Number(event.target.value))} />
+          <input type="number" min={250} step={250} value={Number(draft.lintIdleMs ?? 750)} onChange={(event) => set("lintIdleMs", Number(event.target.value))} />
         </div>
         <div className="field grow">
           <label>Context budget per AI call (tokens)</label>
@@ -215,13 +216,7 @@ export const SettingsDialog = ({ settings, rules, ruleDefaults, onClose, onSaved
       </div>
       <div className="field">
         <label>Style rules</label>
-        <div className="row wrap">
-          {rules.map((rule) => (
-            <label key={rule} style={{ marginRight: 10 }}>
-              <input type="checkbox" checked={lintRules[rule] ?? ruleDefaults[rule]} onChange={(event) => set("lintRules", { ...lintRules, [rule]: event.target.checked })} /> {rule}
-            </label>
-          ))}
-        </div>
+        <RulesEditor config={draft.lint as TextoicConfig} onChange={(lint) => set("lint", lint)} />
       </div>
       {error && <div className="error">{error}</div>}
       <div className="actions">

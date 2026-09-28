@@ -3,7 +3,8 @@ import { describe, it } from "node:test";
 import { parseJsonLoosely, JsonParseError } from "../src/providers/json.js";
 import { Bm25Index, terms } from "../src/context/bm25.js";
 import { chunkText, outlineOf } from "../src/ingest/chunk.js";
-import { blocks, maskMarkdown, plainText } from "../src/lint/markdown.js";
+import { blocks, maskMarkdown } from "@textoic/enlint-lsp";
+import { plainText } from "../src/lint/markdown.js";
 import { summarizeChange, unifiedDiff } from "../src/audit/diff.js";
 import { mergeSettings, defaultSettings } from "../src/settings.js";
 import { locateQuote } from "../src/factcheck/service.js";
@@ -119,7 +120,7 @@ describe("settings", () => {
     assert.equal(merged.provider, "openrouter");
     assert.equal(merged.model, "x/y");
     assert.equal(merged.lintIdleMs, 250);
-    assert.deepEqual(merged.lintRules, { "no-similes": false });
+    assert.deepEqual(merged.lint, { rules: { "no-similes": "off" } });
     assert.equal(merged.research.effort, "medium");
     assert.equal(merged.research.budgetUsd, 0);
   });

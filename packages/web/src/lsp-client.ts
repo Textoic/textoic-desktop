@@ -1,21 +1,15 @@
+import { Methods, type DiagnosticData, type LintStats, type RelintResult } from "@textoic/enlint-lsp/protocol";
+
 export interface LspDiagnostic {
   range: { start: { line: number; character: number }; end: { line: number; character: number } };
   message: string;
   severity?: number;
   code?: string | number;
   source?: string;
-  data?: { ruleId: string; fixes: { range: [number, number]; text: string }[] };
+  data?: DiagnosticData;
 }
 
-export interface LintStats {
-  uri: string;
-  version: number;
-  issues: number;
-  parsedBlocks: number;
-  reusedBlocks: number;
-  totalBlocks: number;
-  durationMs: number;
-}
+export type { LintStats };
 
 type Handlers = {
   onDiagnostics: (uri: string, version: number | undefined, diagnostics: LspDiagnostic[]) => void;
@@ -94,7 +88,7 @@ export class LspClient {
     if (message.method === "textDocument/publishDiagnostics") {
       const params = message.params as { uri: string; version?: number; diagnostics: LspDiagnostic[] };
       this.handlers.onDiagnostics(params.uri, params.version, params.diagnostics);
-    } else if (message.method === "textoic/lintStats") {
+    } else if (message.method === Methods.lintStats) {
       this.handlers.onStats?.(message.params as LintStats);
     } else if (message.id !== undefined) {
       this.send({ jsonrpc: "2.0", id: message.id, result: null });
@@ -145,7 +139,7 @@ export class LspClient {
   }
 
   relint(uri: string) {
-    return this.request<{ ok: boolean; issues?: number }>("textoic/relint", { uri });
+    return this.request<RelintResult>(Methods.relint, { uri });
   }
 
   dispose() {

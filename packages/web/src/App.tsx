@@ -1,5 +1,6 @@
 import type { BlueprintStep, CostEstimate, Document, FactCheckRun, FactFinding, Job, NovelState, Rewrite, Session, TemplateKind, TemplateSettings } from "@textoic/core/types";
 import type { EditorView } from "@codemirror/view";
+import { withIgnoredCase, withSeverity, type TextoicConfig } from "@textoic/enlint-lsp/config";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatUsd, subscribeJobs, type RedactedSettings } from "./api";
 import { ConfirmDialog, CostDialog, NewSessionDialog, RewriteDialog, SettingsDialog } from "./components/Dialogs";
@@ -109,13 +110,33 @@ export const App = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [uri, activeDocument?.id, activeDocument?.updatedAt]);
 
+  const updateLint = useCallback(
+    async (edit: (config: TextoicConfig) => TextoicConfig) => {
+      if (!settings) {
+        return;
+      }
+
+      const result = await api.updateSettings({ lint: edit(settings.lint) });
+      setSettings(result.settings);
+    },
+    [settings],
+  );
+
+  const diagnosticHandlers = useMemo(
+    () => ({
+      onIgnoreCase: (rule: string, key: string) => void updateLint((config) => withIgnoredCase(config, rule, key)),
+      onDisableRule: (rule: string) => void updateLint((config) => withSeverity(config, rule, "off")),
+    }),
+    [updateLint],
+  );
+
   useEffect(() => {
     if (!uri) {
       return;
     }
 
-    setEditorDiagnostics(toEditorDiagnostics(viewRef.current, lspDiagnostics[uri] ?? []));
-  }, [lspDiagnostics, uri, editorKey]);
+    setEditorDiagnostics(toEditorDiagnostics(viewRef.current, lspDiagnostics[uri] ?? [], diagnosticHandlers));
+  }, [lspDiagnostics, uri, editorKey, diagnosticHandlers]);
 
   const flushSave = useCallback(async () => {
     const change = dirty.current;
@@ -397,7 +418,7 @@ export const App = () => {
             )}
             <div className="editor-wrap">
               {activeDocument ? (
-                <Editor key={editorKey} docKey={editorKey} initialText={activeDocument.content} onChange={onEditorChange} onSelection={(from, to) => setSelection([from, to])} diagnostics={editorDiagnostics} onReady={(view) => { viewRef.current = view; setEditorDiagnostics(toEditorDiagnostics(view, (uri && lspDiagnostics[uri]) || [])); }} />
+                <Editor key={editorKey} docKey={editorKey} initialText={activeDocument.content} onChange={onEditorChange} onSelection={(from, to) => setSelection([from, to])} diagnostics={editorDiagnostics} onReady={(view) => { viewRef.current = view; setEditorDiagnostics(toEditorDiagnostics(view, (uri && lspDiagnostics[uri]) || [], diagnosticHandlers)); }} />
               ) : (
                 <div className="empty" style={{ paddingTop: 80 }}>
                   {session.template === "novel" ? "Build and approve the blueprint in the Novel panel, then generate a test chapter." : "No document. Add one with +."}
@@ -406,7 +427,7 @@ export const App = () => {
             </div>
             <div className="statusbar">
               <span>{editorDiagnostics.length} style issue{editorDiagnostics.length === 1 ? "" : "s"}</span>
-              {stats && stats.uri === uri && <span>re-parsed {stats.parsedBlocks}/{stats.totalBlocks} blocks in {stats.durationMs} ms</span>}
+              {stats && stats.uri === uri && <span>re-parsed {stats.parsedBlocks}/{stats.parsedBlocks + stats.reusedBlocks} blocks in {stats.durationMs} ms</span>}
               <span>linter: {lspState}</span>
               {settings && <span>{settings.provider} · {settings.model || "no model set"}</span>}
               {lastCost && <span>last action: {formatUsd(lastCost.spentUsd)}</span>}
@@ -471,7 +492,7 @@ export const App = () => {
       <JobsBar jobs={activeJobs.filter((job) => job.status !== "done" || Date.now() - Date.parse(job.finishedAt ?? job.createdAt) < 60_000)} onDismiss={(jobId) => setJobs((current) => { const next = { ...current }; delete next[jobId]; return next; })} />
 
       {dialog === "new" && <NewSessionDialog promptMax={rules.promptMaxChars} onClose={() => setDialog(null)} onCreate={createSession} />}
-      {dialog === "settings" && settings && <SettingsDialog settings={settings} rules={rules.rules} ruleDefaults={rules.ruleDefaults} onClose={() => setDialog(null)} onSaved={(saved) => { setSettings(saved); setDialog(null); }} />}
+      {dialog === "settings" && settings && <SettingsDialog settings={settings} onClose={() => setDialog(null)} onSaved={(saved) => { setSettings(saved); setDialog(null); }} />}
       {pending && <CostDialog title={pending.title} estimate={pending.estimate} error={pending.error} onClose={() => setPending(null)} onConfirm={() => void confirmAction()} />}
       {rewrite && <RewriteDialog rewrite={rewrite} onClose={() => setRewrite(null)} onApply={applyRewrite} />}
       {confirmResearch && session && (

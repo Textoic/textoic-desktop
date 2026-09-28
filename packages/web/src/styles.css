@@ -162,3 +162,12 @@ label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px
   .app { grid-template-columns: 220px 1fr 320px; }
   .jobs { right: 340px; }
 }
+
+.rules-editor { display: flex; flex-direction: column; gap: 4px; max-height: 40vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 6px; padding: 6px; }
+.rules-editor .rule { border-bottom: 1px solid var(--line); padding: 4px 0; }
+.rules-editor .rule:last-child { border-bottom: none; }
+.rules-editor button.link { background: none; border: none; color: inherit; text-align: left; cursor: pointer; padding: 0; }
+.rules-editor .rule-details { padding: 4px 8px 8px; font-size: 13px; }
+.rules-editor .chip { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin: 2px 4px 2px 0; font-size: 12px; }
+.rules-editor .case-search { margin-top: 6px; }
+.rules-editor .case-row { font-size: 12px; padding: 2px 0; }
