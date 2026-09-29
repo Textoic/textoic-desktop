@@ -17,7 +17,7 @@
   "dependencies": {
     "@hono/node-server": "2.1.1",
     "@textoic/core": "workspace:*",
-    "@textoic/enlint-lsp": "^0.1.0",
+    "@textoic/enlint-lsp": "^0.2.1",
     "vscode-jsonrpc": "9.0.2",
     "vscode-languageserver": "10.1.1",
     "hono": "4.13.7",

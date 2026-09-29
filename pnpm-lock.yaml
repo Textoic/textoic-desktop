@@ -21,11 +21,11 @@ importers:
   packages/core:
     dependencies:
       '@textoic/enlint':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       '@textoic/enlint-lsp':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.1
+        version: 0.2.1
       budget-researcher:
         specifier: link:../../../deepresearch
         version: link:../../../deepresearch
@@ -67,8 +67,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@textoic/enlint-lsp':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.1
+        version: 0.2.1
       hono:
         specifier: 4.13.7
         version: 4.13.7
@@ -122,11 +122,11 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@textoic/enlint':
-        specifier: ^0.2.0
-        version: 0.2.0
+        specifier: ^0.2.1
+        version: 0.2.1
       '@textoic/enlint-lsp':
-        specifier: ^0.1.0
-        version: 0.1.0
+        specifier: ^0.2.1
+        version: 0.2.1
       react:
         specifier: 19.2.8
         version: 19.2.8
@@ -473,13 +473,13 @@ packages:
   '@textoic/artisan@0.1.0':
     resolution: {integrity: sha512-88nmBNBEx7+Lo5Et36xXtuL2xJysZcHQtbB4MNAoo987OKmiznCo5et1+RPxEJVIxpEkTFqVtBQsX0+bgX0rIA==}
 
-  '@textoic/enlint-lsp@0.1.0':
-    resolution: {integrity: sha512-I/rC0Bih4/Pp37i4ci7SjyVt9Z/Nf/LXkQiZ5Zwj01Yb8FPlfCPy2IjPLKJ9K0WdGfSmyQfUhKUkaaPdA0HHeQ==}
+  '@textoic/enlint-lsp@0.2.1':
+    resolution: {integrity: sha512-x5x3VYhsZFHVGimM4GV4JHJeFydXiBXNh5jL5MATICta5fKfkDVags5BkPZHiMnFtReKcbFwXpqCdnVzs8DSCg==}
     engines: {node: '>=20'}
     hasBin: true
 
-  '@textoic/enlint@0.2.0':
-    resolution: {integrity: sha512-raTLJm8l9F7KbTJmVbtAcIvMVLwmgndnUl2GiICnP4akfWGuDR69zU5J39m8z4SaDhyL5s56fXnoNlPRzAXesw==}
+  '@textoic/enlint@0.2.1':
+    resolution: {integrity: sha512-uJkdIwpFDFodZtkPXI2Tpt7HyOGRwVqVBX4LMKyED4BskoqhIHkm347jsa0pXF9Ek8ySrvdc/1jxrEBmNkKiZg==}
 
   '@types/diff@8.0.0':
     resolution: {integrity: sha512-o7jqJM04gfaYrdCecCVMbZhNdG6T1MHg/oQoRFdERLV+4d+V7FijhiEAbFu0Usww84Yijk9yH58U4Jk4HbtzZw==}
@@ -1141,14 +1141,14 @@ snapshots:
 
   '@textoic/artisan@0.1.0': {}
 
-  '@textoic/enlint-lsp@0.1.0':
+  '@textoic/enlint-lsp@0.2.1':
     dependencies:
       '@textoic/artisan': 0.1.0
-      '@textoic/enlint': 0.2.0
+      '@textoic/enlint': 0.2.1
       vscode-languageserver: 10.1.1
       vscode-languageserver-textdocument: 1.0.14
 
-  '@textoic/enlint@0.2.0':
+  '@textoic/enlint@0.2.1':
     dependencies:
       '@textoic/artisan': 0.1.0
       css-select: 6.0.0

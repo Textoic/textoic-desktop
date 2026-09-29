@@ -17,8 +17,8 @@
     "budget-researcher": "link:../../../deepresearch",
     "diff": "9.0.0",
     "mammoth": "1.12.2",
-    "@textoic/enlint": "^0.2.0",
-    "@textoic/enlint-lsp": "^0.1.0",
+    "@textoic/enlint": "^0.2.1",
+    "@textoic/enlint-lsp": "^0.2.1",
     "turndown": "7.2.4",
     "zod": "4.5.4"
   },
