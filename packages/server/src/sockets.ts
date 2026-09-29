@@ -6,6 +6,7 @@ import { connectionOverWebSocket } from "./websocket.js";
 
 export const clientSettingsFrom = (settings: Settings): ClientSettings => ({
   config: settings.lint,
+  ignoredInstances: settings.ignoredInstances,
   debounceMs: settings.lintIdleMs,
   rewrite: false,
 });

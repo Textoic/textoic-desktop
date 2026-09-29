@@ -5,7 +5,7 @@ import { cachedBrief, explore } from "../context/explorer.js";
 import type { ContextService } from "../context/store.js";
 import { estimateFor, type PlannedCall } from "../cost.js";
 import { plannedFactCheckCalls, type FactCheckService } from "../factcheck/service.js";
-import { plannedRewriteCalls, rewritePassage } from "../lint/rewrite.js";
+import { plannedRewriteAllCalls, plannedRewriteCalls, rewriteAllPassages, rewritePassage } from "../lint/rewrite.js";
 import type { LintService } from "../lint/service.js";
 import type { Provider } from "../providers/types.js";
 import type { ResearchService } from "../research/service.js";
@@ -354,6 +354,27 @@ export const rewriteAction: ActionDefinition = {
   },
 };
 
+export const rewriteAllAction: ActionDefinition = {
+  name: "lint.rewriteAll",
+  describe: "Rewrite every paragraph of the document that has style issues, one model call per paragraph.",
+  async estimate(deps, provider, sessionId, params) {
+    const document = await deps.sessions.getDocument(sessionId, stringParam(params, "documentId"));
+    const calls = plannedRewriteAllCalls(document.content, await deps.lint.lint(document.content));
+    return estimateFor(provider, calls, calls.length === 0 ? "No style issues to rewrite; nothing will be spent." : `One call per paragraph with issues: ${calls.length}.`);
+  },
+  async run(ctx, deps, sessionId, params) {
+    const document = await deps.sessions.getDocument(sessionId, stringParam(params, "documentId"));
+    const rewrites = await rewriteAllPassages(ctx, deps.lint, document.content);
+    const passed = rewrites.filter((rewrite) => rewrite.accepted).length;
+    return {
+      summary: `Proposed rewrites for ${rewrites.length} paragraph(s); ${passed} passed the style check`,
+      action: "lint.rewriteAll",
+      target: { type: "document", id: document.id, title: document.title },
+      result: { rewriteAll: { rewrites, documentId: document.id, documentHash: document.contentHash } },
+    };
+  },
+};
+
 export const builtinActions: ActionDefinition[] = [
   tweetAction,
   articleAction,
@@ -364,4 +385,5 @@ export const builtinActions: ActionDefinition[] = [
   digestAction,
   exploreAction,
   rewriteAction,
+  rewriteAllAction,
 ];

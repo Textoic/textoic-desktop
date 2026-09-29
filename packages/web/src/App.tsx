@@ -1,14 +1,16 @@
 import type { BlueprintStep, CostEstimate, Document, FactCheckRun, FactFinding, Job, NovelState, Rewrite, Session, TemplateKind, TemplateSettings } from "@textoic/core/types";
 import type { EditorView } from "@codemirror/view";
 import { withIgnoredCase, withSeverity, type TextoicConfig } from "@textoic/enlint-lsp/config";
+import { instanceOf, withInstance } from "@textoic/enlint-lsp/issues";
+import { StyleIssues, type IssueMode } from "./components/StyleIssues";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatUsd, subscribeJobs, type RedactedSettings } from "./api";
-import { ConfirmDialog, CostDialog, NewSessionDialog, RewriteDialog, SettingsDialog } from "./components/Dialogs";
+import { ConfirmDialog, CostDialog, NewSessionDialog, RewriteAllDialog, RewriteDialog, SettingsDialog } from "./components/Dialogs";
 import { JobsBar } from "./components/JobsBar";
 import { NovelPanel } from "./components/NovelPanel";
 import { AuditPanel, ContextPanel, FactCheckHistory, IssuesPanel, ResearchPanel } from "./components/Panels";
 import { Sidebar } from "./components/Sidebar";
-import { Editor, toEditorDiagnostics, type EditorDiagnostic } from "./editor";
+import { Editor, toEditorDiagnostics, type EditorDiagnostic, type VisibleRange } from "./editor";
 import { LspClient, type LintStats, type LspDiagnostic } from "./lsp-client";
 
 type Tab = "issues" | "context" | "research" | "audit" | "novel" | "session";
@@ -34,6 +36,7 @@ export const App = () => {
   const [dialog, setDialog] = useState<"new" | "settings" | null>(null);
   const [pending, setPending] = useState<PendingAction | null>(null);
   const [rewrite, setRewrite] = useState<(Rewrite & { jobId: string; documentId: string }) | null>(null);
+  const [rewriteAll, setRewriteAll] = useState<{ rewrites: Rewrite[]; jobId: string; documentId: string } | null>(null);
   const [confirmResearch, setConfirmResearch] = useState(false);
   const [auditVersion, setAuditVersion] = useState(0);
   const [editorKey, setEditorKey] = useState("");
@@ -122,12 +125,49 @@ export const App = () => {
     [settings],
   );
 
+  const ignoreInstance = useCallback(
+    async (rule: string, from: number, to: number) => {
+      const text = viewRef.current?.state.doc.toString();
+      if (!settings || !uri || text === undefined) {
+        return;
+      }
+
+      const instance = instanceOf(text, { id: rule, start: from, end: to });
+      const current = settings.ignoredInstances[uri] ?? [];
+      const result = await api.updateSettings({ ignoredInstances: { ...settings.ignoredInstances, [uri]: withInstance(current, instance) } });
+      setSettings(result.settings);
+    },
+    [settings, uri],
+  );
+
+  const restoreInstances = async () => {
+    if (!settings || !uri) {
+      return;
+    }
+
+    const result = await api.updateSettings({ ignoredInstances: { ...settings.ignoredInstances, [uri]: [] } });
+    setSettings(result.settings);
+  };
+
+  const [issueMode, setIssueMode] = useState<IssueMode>(() => (localStorage.getItem("textoic.issueMode") === "byType" ? "byType" : "inView"));
+  const [panelOpen, setPanelOpen] = useState(() => localStorage.getItem("textoic.panelOpen") !== "false");
+  const [visible, setVisible] = useState<VisibleRange | null>(null);
+  const chooseIssueMode = (mode: IssueMode) => {
+    localStorage.setItem("textoic.issueMode", mode);
+    setIssueMode(mode);
+  };
+  const togglePanel = () => {
+    localStorage.setItem("textoic.panelOpen", String(!panelOpen));
+    setPanelOpen(!panelOpen);
+  };
+
   const diagnosticHandlers = useMemo(
     () => ({
       onIgnoreCase: (rule: string, key: string) => void updateLint((config) => withIgnoredCase(config, rule, key)),
       onDisableRule: (rule: string) => void updateLint((config) => withSeverity(config, rule, "off")),
+      onIgnoreInstance: (rule: string, from: number, to: number) => void ignoreInstance(rule, from, to),
     }),
-    [updateLint],
+    [updateLint, ignoreInstance],
   );
 
   useEffect(() => {
@@ -200,6 +240,9 @@ export const App = () => {
     if (job.action === "lint.rewrite" && result.rewrite) {
       const proposed = result.rewrite as Rewrite & { documentId: string };
       setRewrite({ ...proposed, jobId: job.id });
+    } else if (job.action === "lint.rewriteAll" && result.rewriteAll) {
+      const proposed = result.rewriteAll as { rewrites: Rewrite[]; documentId: string };
+      setRewriteAll({ rewrites: proposed.rewrites, documentId: proposed.documentId, jobId: job.id });
     } else if (job.action === "factcheck.run" && Array.isArray(result.findings)) {
       setFindings(result.findings as FactFinding[]);
       setTab("issues");
@@ -376,13 +419,26 @@ export const App = () => {
     setAuditVersion((version) => version + 1);
   };
 
+  const applyRewriteAll = async (indexes: number[]) => {
+    if (!session || !rewriteAll) {
+      return;
+    }
+
+    await api.applyRewriteAll(session.id, rewriteAll.documentId, rewriteAll.jobId, indexes);
+    setRewriteAll(null);
+    await refreshDocuments(session.id);
+    setAuditVersion((version) => version + 1);
+  };
+
+  const startRewriteAll = () => activeDocument && void startAction("lint.rewriteAll", { documentId: activeDocument.id }, "Rewrite all issues with AI");
+
   const novelState = session?.novel ?? null;
   const activeJobs = Object.values(jobs).filter((job) => job.sessionId === session?.id);
   const lastCost = activeJobs.filter((job) => job.status === "done").sort((one, other) => (other.finishedAt ?? "").localeCompare(one.finishedAt ?? ""))[0];
   const hasSelection = selection[0] !== selection[1];
 
   return (
-    <div className="app">
+    <div className={panelOpen ? "app" : "app panel-closed"}>
       <Sidebar sessions={sessions} activeId={session?.id ?? null} onSelect={(id) => void flushSave().then(() => openSession(id))} onNew={() => setDialog("new")} onSettings={() => setDialog("settings")} lspState={lspState} provider={settings ? `${settings.provider} · ${settings.model || "no model"}` : ""} />
 
       <main className="main">
@@ -399,8 +455,10 @@ export const App = () => {
               <span className="grow" />
               {(session.template === "tweet" || session.template === "article") && activeDocument && <button className="small" onClick={regenerate}>Generate…</button>}
               {activeDocument && <button className="small" onClick={() => void startAction("lint.rewrite", { documentId: activeDocument.id, start: selection[0], end: selection[1] }, hasSelection ? "Rewrite selection with AI" : "Rewrite paragraph with AI")}>{hasSelection ? "Rewrite selection" : "Rewrite ¶"}</button>}
+              {activeDocument && <button className="small" onClick={startRewriteAll} title="Rewrite every paragraph with style issues">Rewrite all</button>}
               {activeDocument && <button className="small" onClick={() => void factCheck()}>Fact-check</button>}
               {activeDocument && <button className="small" onClick={() => void lspRef.current?.relint(uri ?? "")}>Re-lint</button>}
+              <button className="small" aria-expanded={panelOpen} aria-controls="side-panel" onClick={togglePanel} title="Show or hide the issues panel">{panelOpen ? "Hide panel" : `Issues (${editorDiagnostics.length}) ▸`}</button>
               {activeDocument && (
                 <>
                   <button className="small ghost" onClick={() => exportDocument("markdown")}>.md</button>
@@ -418,7 +476,7 @@ export const App = () => {
             )}
             <div className="editor-wrap">
               {activeDocument ? (
-                <Editor key={editorKey} docKey={editorKey} initialText={activeDocument.content} onChange={onEditorChange} onSelection={(from, to) => setSelection([from, to])} diagnostics={editorDiagnostics} onReady={(view) => { viewRef.current = view; setEditorDiagnostics(toEditorDiagnostics(view, (uri && lspDiagnostics[uri]) || [], diagnosticHandlers)); }} />
+                <Editor key={editorKey} docKey={editorKey} initialText={activeDocument.content} onChange={onEditorChange} onSelection={(from, to) => setSelection([from, to])} diagnostics={editorDiagnostics} onVisible={setVisible} onReady={(view) => { viewRef.current = view; setEditorDiagnostics(toEditorDiagnostics(view, (uri && lspDiagnostics[uri]) || [], diagnosticHandlers)); }} />
               ) : (
                 <div className="empty" style={{ paddingTop: 80 }}>
                   {session.template === "novel" ? "Build and approve the blueprint in the Novel panel, then generate a test chapter." : "No document. Add one with +."}
@@ -439,7 +497,7 @@ export const App = () => {
         )}
       </main>
 
-      <aside className="panel">
+      <aside id="side-panel" className="panel" hidden={!panelOpen}>
         <div className="tabs">
           {(["issues", "context", "research", "audit", ...(novelState ? ["novel"] : []), "session"] as Tab[]).map((one) => (
             <span key={one} className={`tab${tab === one ? " active" : ""}`} onClick={() => setTab(one)}>{one === "issues" ? `Issues${editorDiagnostics.length ? ` (${editorDiagnostics.length})` : ""}` : one[0].toUpperCase() + one.slice(1)}</span>
@@ -448,7 +506,29 @@ export const App = () => {
         <div className="panel-body">
           {session && tab === "issues" && (
             <>
-              <IssuesPanel diagnostics={editorDiagnostics} findings={findings} onJump={jumpTo} hasSelection={hasSelection} onRewrite={() => activeDocument && void startAction("lint.rewrite", { documentId: activeDocument.id, start: selection[0], end: selection[1] }, "Rewrite with AI")} onFactCheck={() => void factCheck()} />
+              <IssuesPanel
+                diagnostics={editorDiagnostics}
+                findings={findings}
+                styleIssues={
+                  <StyleIssues
+                    diagnostics={(uri && lspDiagnostics[uri]) || []}
+                    view={viewRef.current}
+                    visible={visible}
+                    mode={issueMode}
+                    onMode={chooseIssueMode}
+                    handlers={{
+                      onJump: jumpTo,
+                      onRewrite: (start, end) => activeDocument && void startAction("lint.rewrite", { documentId: activeDocument.id, start, end }, "Rewrite with AI"),
+                      onIgnoreInstance: (rule, from, to) => void ignoreInstance(rule, from, to),
+                      onIgnoreCase: diagnosticHandlers.onIgnoreCase,
+                      onDisableRule: diagnosticHandlers.onDisableRule,
+                    }}
+                    ignoredCount={(uri && settings?.ignoredInstances[uri]?.length) || 0}
+                    onRestore={() => void restoreInstances()}
+                  />
+                }
+                onJump={jumpTo}
+                hasSelection={hasSelection} onRewrite={() => activeDocument && void startAction("lint.rewrite", { documentId: activeDocument.id, start: selection[0], end: selection[1] }, "Rewrite with AI")} onRewriteAll={startRewriteAll} onFactCheck={() => void factCheck()} />
               <FactCheckHistory session={session} version={auditVersion} onSelect={(run: FactCheckRun) => setFindings(run.findings)} />
             </>
           )}
@@ -494,6 +574,7 @@ export const App = () => {
       {dialog === "new" && <NewSessionDialog promptMax={rules.promptMaxChars} onClose={() => setDialog(null)} onCreate={createSession} />}
       {dialog === "settings" && settings && <SettingsDialog settings={settings} onClose={() => setDialog(null)} onSaved={(saved) => { setSettings(saved); setDialog(null); }} />}
       {pending && <CostDialog title={pending.title} estimate={pending.estimate} error={pending.error} onClose={() => setPending(null)} onConfirm={() => void confirmAction()} />}
+      {rewriteAll && <RewriteAllDialog rewrites={rewriteAll.rewrites} onClose={() => setRewriteAll(null)} onApply={applyRewriteAll} />}
       {rewrite && <RewriteDialog rewrite={rewrite} onClose={() => setRewrite(null)} onApply={applyRewrite} />}
       {confirmResearch && session && (
         <ConfirmDialog

@@ -77,6 +77,7 @@ export const api = {
   deleteDocument: (sessionId: string, documentId: string) => request<{ ok: true }>(`/sessions/${sessionId}/documents/${documentId}`, { method: "DELETE" }),
   exportUrl: (sessionId: string, documentId: string, format: "markdown" | "text") => `/api/sessions/${sessionId}/documents/${documentId}/export?format=${format}`,
   applyRewrite: (sessionId: string, documentId: string, jobId: string) => request<{ document: Document }>(`/sessions/${sessionId}/documents/${documentId}/rewrite`, json({ jobId })),
+  applyRewriteAll: (sessionId: string, documentId: string, jobId: string, indexes: number[]) => request<{ document: Document }>(`/sessions/${sessionId}/documents/${documentId}/rewrite-all`, json({ jobId, indexes })),
   context: (sessionId: string) => request<{ items: ContextView[]; totalTokens: number; budgetTokens: number }>(`/sessions/${sessionId}/context`),
   uploadContext: (sessionId: string, files: File[]) => {
     const form = new FormData();

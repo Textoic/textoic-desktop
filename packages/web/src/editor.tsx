@@ -4,7 +4,7 @@ import { syntaxHighlighting, defaultHighlightStyle } from "@codemirror/language"
 import { lintGutter, setDiagnostics, type Action, type Diagnostic } from "@codemirror/lint";
 import { highlightSelectionMatches, searchKeymap } from "@codemirror/search";
 import { Compartment, EditorState, type Extension } from "@codemirror/state";
-import { EditorView, keymap, lineNumbers, placeholder } from "@codemirror/view";
+import { EditorView, keymap, lineNumbers, placeholder, ViewPlugin, type ViewUpdate } from "@codemirror/view";
 import { useEffect, useRef } from "react";
 import type { LspDiagnostic } from "./lsp-client";
 
@@ -28,6 +28,7 @@ interface EditorProps {
   onSelection?: (from: number, to: number) => void;
   diagnostics: EditorDiagnostic[];
   onReady?: (view: EditorView) => void;
+  onVisible?: (visible: VisibleRange) => void;
   readOnly?: boolean;
 }
 
@@ -49,7 +50,51 @@ const theme = EditorView.theme({
 export interface DiagnosticHandlers {
   onIgnoreCase?: (rule: string, key: string) => void;
   onDisableRule?: (rule: string) => void;
+  onIgnoreInstance?: (rule: string, from: number, to: number) => void;
 }
+
+export interface VisibleRange {
+  from: number;
+  to: number;
+}
+
+const onScreen = (view: EditorView): VisibleRange => {
+  const frame = view.scrollDOM.getBoundingClientRect();
+  const top = Math.max(frame.top, 0) - view.documentTop;
+  const bottom = Math.min(frame.bottom, window.innerHeight) - view.documentTop;
+  if (bottom <= 0 || top >= view.contentHeight) {
+    return { from: 0, to: 0 };
+  }
+
+  return {
+    from: view.lineBlockAtHeight(Math.max(0, top)).from,
+    to: view.lineBlockAtHeight(Math.min(bottom, view.contentHeight - 1)).to,
+  };
+};
+
+const screenWatcher = (report: (visible: VisibleRange) => void) =>
+  ViewPlugin.define((view) => {
+    let frame = 0;
+    const notify = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => report(onScreen(view)));
+    };
+    view.scrollDOM.addEventListener("scroll", notify, { passive: true });
+    window.addEventListener("resize", notify);
+    notify();
+    return {
+      update: (update: ViewUpdate) => {
+        if (update.viewportChanged || update.geometryChanged || update.docChanged) {
+          notify();
+        }
+      },
+      destroy: () => {
+        cancelAnimationFrame(frame);
+        view.scrollDOM.removeEventListener("scroll", notify);
+        window.removeEventListener("resize", notify);
+      },
+    };
+  });
 
 const severities: Record<number, EditorDiagnostic["severity"]> = { 1: "error", 2: "warning", 3: "info", 4: "hint" };
 
@@ -64,7 +109,8 @@ const settingActions = (diagnostic: LspDiagnostic, handlers: DiagnosticHandlers)
       ? [{ name: `Ignore "${data.case}"`, apply: () => handlers.onIgnoreCase?.(data.rule, data.case ?? "") }]
       : [];
   const disable: Action[] = handlers.onDisableRule ? [{ name: "Turn off rule", apply: () => handlers.onDisableRule?.(data.rule) }] : [];
-  return [...ignore, ...disable];
+  const once: Action[] = handlers.onIgnoreInstance ? [{ name: "Ignore this one", apply: (_view, from, to) => handlers.onIgnoreInstance?.(data.rule, from, to) }] : [];
+  return [...once, ...ignore, ...disable];
 };
 
 export const toEditorDiagnostics = (view: EditorView | null, diagnostics: LspDiagnostic[], handlers: DiagnosticHandlers = {}): EditorDiagnostic[] => {
@@ -95,14 +141,16 @@ export const toEditorDiagnostics = (view: EditorView | null, diagnostics: LspDia
   }));
 };
 
-export const Editor = ({ docKey, initialText, onChange, onSelection, diagnostics, onReady, readOnly }: EditorProps) => {
+export const Editor = ({ docKey, initialText, onChange, onSelection, diagnostics, onReady, onVisible, readOnly }: EditorProps) => {
   const host = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
   const readOnlyCompartment = useRef(new Compartment());
   const onChangeRef = useRef(onChange);
   const onSelectionRef = useRef(onSelection);
+  const onVisibleRef = useRef(onVisible);
   onChangeRef.current = onChange;
   onSelectionRef.current = onSelection;
+  onVisibleRef.current = onVisible;
 
   useEffect(() => {
     if (!host.current) {
@@ -121,6 +169,7 @@ export const Editor = ({ docKey, initialText, onChange, onSelection, diagnostics
       EditorView.lineWrapping,
       theme,
       readOnlyCompartment.current.of(EditorState.readOnly.of(readOnly ?? false)),
+      screenWatcher((visible) => onVisibleRef.current?.(visible)),
       EditorView.updateListener.of((update) => {
         if (update.docChanged) {
           onChangeRef.current(update.state.doc.toString());

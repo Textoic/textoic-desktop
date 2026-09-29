@@ -1,28 +1,19 @@
 import type { AuditEntry, Document, FactCheckRun, FactFinding, ResearchRecord, Session } from "@textoic/core/types";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { api, formatTokens, formatUsd, timeAgo, type ContextView } from "../api";
 import type { EditorDiagnostic } from "../editor";
 import { useAsync } from "../hooks";
 import { EstimateView } from "./Dialogs";
 
-export const IssuesPanel = ({ diagnostics, findings, onJump, onRewrite, onFactCheck, hasSelection }: { diagnostics: EditorDiagnostic[]; findings: FactFinding[]; onJump: (from: number, to: number) => void; onRewrite: () => void; onFactCheck: () => void; hasSelection: boolean }) => (
+export const IssuesPanel = ({ diagnostics, findings, styleIssues, onJump, onRewrite, onRewriteAll, onFactCheck, hasSelection }: { diagnostics: EditorDiagnostic[]; findings: FactFinding[]; styleIssues: ReactNode; onJump: (from: number, to: number) => void; onRewrite: () => void; onRewriteAll: () => void; onFactCheck: () => void; hasSelection: boolean }) => (
   <div>
     <div className="panel-section">
-      <div className="row" style={{ marginBottom: 8 }}>
-        <h3 className="grow" style={{ margin: 0 }}>Style · {diagnostics.length}</h3>
+      <h3 style={{ marginBottom: 6 }}>Style · {diagnostics.length}</h3>
+      <div className="row" style={{ marginBottom: 8, flexWrap: "wrap" }}>
         <button className="small" onClick={onRewrite} title="Ask the model to rewrite the selected passage (or the paragraph at the cursor) fixing the listed issues">{hasSelection ? "Rewrite selection with AI" : "Rewrite paragraph with AI"}</button>
+        <button className="small" disabled={diagnostics.length === 0} onClick={onRewriteAll} title="Ask the model to rewrite every paragraph with style issues, one call per paragraph">Rewrite all issues with AI</button>
       </div>
-      {diagnostics.length === 0 ? (
-        <div className="empty">No style issues found. Issues appear a few seconds after you stop typing.</div>
-      ) : (
-        <div className="list">
-          {diagnostics.map((diagnostic, index) => (
-            <div key={index} className="card clickable issue" onClick={() => onJump(diagnostic.from, diagnostic.to)}>
-              <div className="small-text">{diagnostic.message}</div>
-            </div>
-          ))}
-        </div>
-      )}
+      {styleIssues}
     </div>
     <div className="panel-section">
       <div className="row" style={{ marginBottom: 8 }}>

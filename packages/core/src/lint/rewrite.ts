@@ -2,6 +2,7 @@ import {
   cleanedAnswer,
   outputTokensFor,
   passageAround,
+  passagesWithProblems,
   rejectionOf,
   rewriteMessages,
   styleGuide,
@@ -38,12 +39,40 @@ export const plannedRewriteCalls = async (request: RewriteRequest, issues: LintI
   return [{ stage: "rewrite", messages: messagesFor(passage, within, from), maxOutputTokens: outputTokensFor(passage) }];
 };
 
+const issuesWithin = (issues: LintIssue[], from: number, to: number) => issues.filter((issue) => issue.start >= from && issue.end <= to);
+
+const paragraphsWithIssues = (text: string, issues: LintIssue[]) => passagesWithProblems(text, issues as LintError[]);
+
+export const plannedRewriteAllCalls = (text: string, issues: LintIssue[]): PlannedCall[] =>
+  paragraphsWithIssues(text, issues).map(({ start, end }, index) => {
+    const passage = text.slice(start, end);
+    return { stage: `rewrite paragraph ${index + 1}`, messages: messagesFor(passage, issuesWithin(issues, start, end), start), maxOutputTokens: outputTokensFor(passage) };
+  });
+
 export const rewritePassage = async (ctx: ActionContext, lint: LintService, request: RewriteRequest): Promise<Rewrite> => {
   const [from, to] = passageBounds(request.text, request.start, request.end);
-  const passage = request.text.slice(from, to);
-  const all = await lint.lint(request.text);
-  const before = all.filter((issue) => issue.start >= from && issue.end <= to);
+  const before = issuesWithin(await lint.lint(request.text), from, to);
   ctx.progress({ step: "rewriting passage", done: 0, total: 1 });
+  const rewrite = await rewriteSpan(ctx, lint, request.text, [from, to], before);
+  ctx.progress({ step: "rewrite ready", done: 1, total: 1 });
+  return rewrite;
+};
+
+export const rewriteAllPassages = async (ctx: ActionContext, lint: LintService, text: string): Promise<Rewrite[]> => {
+  const issues = await lint.lint(text);
+  const spans = paragraphsWithIssues(text, issues);
+  const rewrites: Rewrite[] = [];
+  for (const [index, { start, end }] of spans.entries()) {
+    ctx.progress({ step: `rewriting paragraph ${index + 1} of ${spans.length}`, done: index, total: spans.length });
+    rewrites.push(await rewriteSpan(ctx, lint, text, [start, end], issuesWithin(issues, start, end)));
+  }
+
+  ctx.progress({ step: "rewrites ready", done: spans.length, total: spans.length });
+  return rewrites;
+};
+
+const rewriteSpan = async (ctx: ActionContext, lint: LintService, text: string, [from, to]: [number, number], before: LintIssue[]): Promise<Rewrite> => {
+  const passage = text.slice(from, to);
   const result = await ctx.call("rewrite", {
     messages: messagesFor(passage, before, from),
     maxOutputTokens: outputTokensFor(passage),
@@ -58,6 +87,5 @@ export const rewritePassage = async (ctx: ActionContext, lint: LintService, requ
     before: before as LintError[],
     after: after as LintError[],
   });
-  ctx.progress({ step: "rewrite ready", done: 1, total: 1 });
   return { start: from, end: to, original: passage, replacement, before, after, accepted: reason === undefined, reason };
 };

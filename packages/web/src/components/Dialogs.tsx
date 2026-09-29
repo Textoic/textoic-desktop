@@ -305,6 +305,57 @@ export const RewriteDialog = ({ rewrite, onClose, onApply }: { rewrite: Rewrite;
   );
 };
 
+const RewriteAllItem = ({ rewrite, chosen, onToggle }: { rewrite: Rewrite; chosen: boolean; onToggle: () => void }) => (
+  <div className="rewrite" style={{ marginBottom: 10 }}>
+    <label className="row small-text muted" style={{ marginBottom: 8 }}>
+      <input type="checkbox" checked={chosen} disabled={rewrite.replacement === ""} onChange={onToggle} />
+      <span>Before: {rewrite.before.length} · After: {rewrite.after.length}</span>
+      {!rewrite.accepted && <span className="badge bad">rejected: {rewrite.reason}</span>}
+    </label>
+    <div className="before">{rewrite.original}</div>
+    <div style={{ height: 8 }} />
+    <div className="after">{rewrite.replacement || "(empty)"}</div>
+  </div>
+);
+
+export const RewriteAllDialog = ({ rewrites, onClose, onApply }: { rewrites: Rewrite[]; onClose: () => void; onApply: (indexes: number[]) => Promise<void> }) => {
+  const [chosen, setChosen] = useState(() => new Set(rewrites.flatMap((rewrite, index) => (rewrite.accepted ? [index] : []))));
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const toggle = (index: number) => setChosen((current) => {
+    const next = new Set(current);
+    if (!next.delete(index)) {
+      next.add(index);
+    }
+
+    return next;
+  });
+  return (
+    <Modal title="Rewrite all issues" onClose={onClose} wide>
+      {rewrites.length === 0 ? <div className="empty">No paragraph had style issues.</div> : rewrites.map((rewrite, index) => <RewriteAllItem key={rewrite.start} rewrite={rewrite} chosen={chosen.has(index)} onToggle={() => toggle(index)} />)}
+      {error && <div className="error">{error}</div>}
+      <div className="actions">
+        <button className="ghost" onClick={onClose}>Discard</button>
+        <button
+          className="primary"
+          disabled={busy || chosen.size === 0}
+          onClick={async () => {
+            setBusy(true);
+            try {
+              await onApply([...chosen]);
+            } catch (cause) {
+              setError(cause instanceof Error ? cause.message : String(cause));
+              setBusy(false);
+            }
+          }}
+        >
+          Apply {chosen.size} rewrite{chosen.size === 1 ? "" : "s"}
+        </button>
+      </div>
+    </Modal>
+  );
+};
+
 export const ConfirmDialog = ({ title, message, confirmLabel, onClose, onConfirm }: { title: string; message: ReactNode; confirmLabel: string; onClose: () => void; onConfirm: () => void }) => (
   <Modal title={title} onClose={onClose}>
     <div>{message}</div>

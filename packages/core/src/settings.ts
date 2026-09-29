@@ -1,4 +1,4 @@
-import type { Settings, TextoicConfig } from "./types.js";
+import type { IgnoredInstance, IgnoredInstances, Settings, TextoicConfig } from "./types.js";
 
 export const defaultSettings = (): Settings => ({
   provider: "ollama",
@@ -10,6 +10,7 @@ export const defaultSettings = (): Settings => ({
   serperKey: "",
   lintIdleMs: 750,
   lint: {},
+  ignoredInstances: {},
   pricingOverrides: {},
   contextBudgetTokens: 12000,
   auditCoalesceMs: 120000,
@@ -40,6 +41,19 @@ const lintConfigOf = (source: Record<string, unknown>, base: TextoicConfig): Tex
       ? fromLegacyRules(source.lintRules)
       : base;
 
+const isInstance = (value: unknown): value is IgnoredInstance =>
+  isRecord(value) && typeof value.rule === "string" && typeof value.quote === "string" && typeof value.context === "string";
+
+const ignoredInstancesOf = (value: unknown, base: IgnoredInstances): IgnoredInstances =>
+  isRecord(value)
+    ? Object.fromEntries(
+        Object.entries(value).flatMap(([uri, list]) => {
+          const instances = Array.isArray(list) ? list.filter(isInstance).map(({ rule, quote, context }) => ({ rule, quote, context })) : [];
+          return instances.length === 0 ? [] : [[uri, instances]];
+        }),
+      )
+    : base;
+
 export const mergeSettings = (
   base: Settings,
   patch: Partial<Settings> | Record<string, unknown>,
@@ -61,6 +75,7 @@ export const mergeSettings = (
     serperKey: stringOr(source.serperKey, base.serperKey),
     lintIdleMs: Math.max(250, Math.round(numberOr(source.lintIdleMs, base.lintIdleMs))),
     lint: lintConfigOf(source, base.lint),
+    ignoredInstances: ignoredInstancesOf(source.ignoredInstances, base.ignoredInstances),
     pricingOverrides: isRecord(source.pricingOverrides)
       ? Object.fromEntries(
           Object.entries(source.pricingOverrides).flatMap(([key, value]) =>

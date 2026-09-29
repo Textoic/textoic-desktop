@@ -1,6 +1,7 @@
 import type { TextoicConfig } from "@textoic/enlint-lsp/config";
+import type { IgnoredInstance, IgnoredInstances } from "@textoic/enlint-lsp/issues";
 
-export type { TextoicConfig };
+export type { IgnoredInstance, IgnoredInstances, TextoicConfig };
 
 export type ProviderKind = "ollama" | "openrouter";
 
@@ -21,6 +22,7 @@ export interface Settings {
   serperKey: string;
   lintIdleMs: number;
   lint: TextoicConfig;
+  ignoredInstances: IgnoredInstances;
   pricingOverrides: Record<string, ModelPricing>;
   contextBudgetTokens: number;
   auditCoalesceMs: number;

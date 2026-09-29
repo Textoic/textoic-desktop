@@ -13,6 +13,7 @@ import {
   type Rewrite,
   type Textoic,
 } from "@textoic/core";
+import { withRewrites } from "@textoic/enlint-lsp/rewrite";
 import { Hono, type Context } from "hono";
 import { streamSSE } from "hono/streaming";
 
@@ -207,6 +208,37 @@ export const createApp = ({ engine, webDir }: AppOptions) => {
       document.id,
       { content },
       { actor: entry?.actor ?? { kind: "ai", provider: (await engine.settings()).provider, model: (await engine.settings()).model }, action: "lint.rewrite.apply", summary: "Applied an AI style rewrite", ai: entry?.ai },
+    );
+    return c.json({ document: updated });
+  });
+
+  api.post("/sessions/:id/documents/:docId/rewrite-all", async (c) => {
+    const input = await body(c);
+    const jobId = typeof input.jobId === "string" ? input.jobId : "";
+    const chosen = new Set(Array.isArray(input.indexes) ? input.indexes.filter((index): index is number => typeof index === "number") : []);
+    const job = engine.jobs.get(jobId);
+    const result = job?.result as { rewriteAll?: { rewrites: Rewrite[]; documentId: string; documentHash: string } } | undefined;
+    if (!job || job.status !== "done" || !result?.rewriteAll) {
+      throw new TextoicError("That rewrite job has no result to apply.", 404);
+    }
+
+    const document = await engine.sessions.getDocument(c.req.param("id"), c.req.param("docId"));
+    if (result.rewriteAll.documentId !== document.id || result.rewriteAll.documentHash !== document.contentHash) {
+      throw new TextoicError("The document changed since the rewrites were proposed. Ask for new ones.", 409);
+    }
+
+    const picked = result.rewriteAll.rewrites.filter((rewrite, index) => chosen.has(index) && rewrite.replacement !== "");
+    if (picked.length === 0) {
+      throw new TextoicError("Choose at least one rewrite to apply.", 400);
+    }
+
+    const content = withRewrites(document.content, picked);
+    const entry = job.auditEntryId ? await engine.audit.get(document.sessionId, job.auditEntryId) : null;
+    const updated = await engine.sessions.updateDocument(
+      document.sessionId,
+      document.id,
+      { content },
+      { actor: entry?.actor ?? { kind: "ai", provider: (await engine.settings()).provider, model: (await engine.settings()).model }, action: "lint.rewriteAll.apply", summary: `Applied ${picked.length} AI style rewrite(s)`, ai: entry?.ai },
     );
     return c.json({ document: updated });
   });

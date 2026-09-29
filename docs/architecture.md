@@ -19,6 +19,16 @@ web (React + CodeMirror)  ──HTTP /api──▶  server (Hono)  ──▶  co
 
 ## Decisions
 
+### 2026-09-29 — the issues panel reads LSP diagnostics; ignored instances live in settings
+
+The Issues tab lists style issues from the raw LSP diagnostics (rule, case and fixes ride in `data`), not from the CodeMirror diagnostics, which carry only a message. "In view" means the lines on screen: the editor reports them from `documentTop` and `lineBlockAtHeight` on scroll, resize and view updates, once per animation frame, because `visibleRanges` includes CodeMirror's render margin. "By type" groups with enlint-lsp's `groupedByRule`, largest group first; groups collapse in component state.
+
+"Ignore this one" stores `{ rule, quote, context }` under the document's LSP URI in `settings.ignoredInstances`, in the data folder's settings file. `clientSettingsFrom` passes them to every LSP socket, and `onSettingsChange` re-lints, so the problem disappears everywhere the document is open. `mergeSettings` drops malformed entries and empty lists. Entries for deleted documents stay until someone restores them; they cost a few bytes each. The panel's open state and mode are per-browser conveniences in localStorage.
+
+### 2026-09-29 — "Rewrite all issues" is one audited action with one call per paragraph
+
+`lint.rewriteAll` lints the document once, takes the paragraphs with issues from enlint-lsp's `passagesWithProblems`, and runs the same audited rewrite as `lint.rewrite` on each, one after another, so the cost dialog lists one planned call per paragraph and the audit entry holds every call. The job result keeps every rewrite with its verdict; the dialog ticks the ones that passed, and `POST /documents/:id/rewrite-all` applies the ticked indexes with `withRewrites` in one document update, refusing with 409 if the document changed since the job ran. A server test drives the whole path with a fake provider.
+
 ### 2026-09-27 — linting moved to enlint-lsp; the app keeps the audited rewrite
 
 The Textoic family now has three editors (this app, the VS Code extension and textoic.com), and all three need the same linting, config and rewrite prompt. `packages/lsp`, `lint/incremental.ts`, `lint/parser.ts` and the Markdown masking moved to `@textoic/enlint-lsp`; `english-lint` and `nlp` became `@textoic/enlint` and `@textoic/artisan`. `LintService` is now a thin wrapper that resolves `settings.lint` and calls `lintText`.

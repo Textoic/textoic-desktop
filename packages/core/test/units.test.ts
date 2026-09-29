@@ -124,6 +124,13 @@ describe("settings", () => {
     assert.equal(merged.research.effort, "medium");
     assert.equal(merged.research.budgetUsd, 0);
   });
+
+  it("keeps well-formed ignored instances per document and drops the rest", () => {
+    const instance = { rule: "no-explained-intensifiers", quote: "very dirty", context: "The hall was very dirty." };
+    const merged = mergeSettings(defaultSettings(), { ignoredInstances: { "textoic://s/a.md": [instance, { rule: 1 }], "textoic://s/b.md": [] } });
+    assert.deepEqual(merged.ignoredInstances, { "textoic://s/a.md": [instance] });
+    assert.deepEqual(mergeSettings(merged, { model: "m" }).ignoredInstances, merged.ignoredInstances);
+  });
 });
 
 describe("helpers", () => {
