@@ -1,11 +1,12 @@
 import type { BlueprintStep, CostEstimate, Document, FactCheckRun, FactFinding, Job, NovelState, Rewrite, Session, TemplateKind, TemplateSettings } from "@textoic/core/types";
-import type { EditorView } from "@codemirror/view";
+import { EditorView } from "@codemirror/view";
 import { withIgnoredCase, withSeverity, type TextoicConfig } from "@textoic/enlint-lsp/config";
 import { instanceOf, withInstance } from "@textoic/enlint-lsp/issues";
 import { StyleIssues, type IssueMode } from "./components/StyleIssues";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api, formatUsd, subscribeJobs, type RedactedSettings } from "./api";
-import { ConfirmDialog, CostDialog, NewSessionDialog, RewriteAllDialog, RewriteDialog, SettingsDialog } from "./components/Dialogs";
+import type { ApplyAllMode, Scope } from "@textoic/enlint-lsp/fixes";
+import { ApplyAllDialog, ConfirmDialog, CostDialog, NewSessionDialog, RewriteAllDialog, RewriteDialog, SettingsDialog, type ApplyAllRequest } from "./components/Dialogs";
 import { JobsBar } from "./components/JobsBar";
 import { NovelPanel } from "./components/NovelPanel";
 import { AuditPanel, ContextPanel, FactCheckHistory, IssuesPanel, ResearchPanel } from "./components/Panels";
@@ -14,6 +15,18 @@ import { Editor, toEditorDiagnostics, type EditorDiagnostic, type VisibleRange }
 import { LspClient, type LintStats, type LspDiagnostic } from "./lsp-client";
 
 type Tab = "issues" | "context" | "research" | "audit" | "novel" | "session";
+
+type PendingApplyAll = ApplyAllRequest & { scope: Scope };
+
+const matchesScope = (scope: Scope) => (diagnostic: LspDiagnostic) =>
+  (scope.rule === undefined || (diagnostic.data?.rule ?? String(diagnostic.code ?? "")) === scope.rule) && (scope.case === undefined || diagnostic.data?.case === scope.case);
+
+const countsIn = (diagnostics: LspDiagnostic[], scope: Scope) => {
+  const matching = diagnostics.filter(matchesScope(scope));
+  return { total: matching.length, fixable: matching.filter(({ data }) => (data?.fixes ?? []).length > 0).length };
+};
+
+const plural = (count: number, word: string, many = `${word}s`) => `${count} ${count === 1 ? word : many}`;
 
 type PendingAction = { action: string; params: Record<string, unknown>; title: string; estimate: CostEstimate | null; error: string | null };
 
@@ -41,6 +54,7 @@ export const App = () => {
   const [auditVersion, setAuditVersion] = useState(0);
   const [editorKey, setEditorKey] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
+  const [applyAll, setApplyAll] = useState<PendingApplyAll | null>(null);
   const [editorDiagnostics, setEditorDiagnostics] = useState<EditorDiagnostic[]>([]);
   const viewRef = useRef<EditorView | null>(null);
   const lspRef = useRef<LspClient | null>(null);
@@ -349,7 +363,7 @@ export const App = () => {
     }
 
     const length = view.state.doc.length;
-    view.dispatch({ selection: { anchor: Math.min(from, length), head: Math.min(to, length) }, scrollIntoView: true });
+    view.dispatch({ selection: { anchor: Math.min(from, length), head: Math.min(to, length) }, effects: EditorView.scrollIntoView(Math.min(from, length), { y: "center" }) });
     view.focus();
   };
 
@@ -430,7 +444,35 @@ export const App = () => {
     setAuditVersion((version) => version + 1);
   };
 
-  const startRewriteAll = () => activeDocument && void startAction("lint.rewriteAll", { documentId: activeDocument.id }, "Rewrite all issues with AI");
+  const askApplyAll = (scope: Scope, label: string) => setApplyAll({ scope, label, ...countsIn((uri && lspDiagnostics[uri]) || [], scope) });
+
+  const applyFixes = async (scope: Scope) => {
+    const view = viewRef.current;
+    const client = lspRef.current;
+    if (!view || !client || !uri) {
+      return 0;
+    }
+
+    const { edits } = await client.fixAll(uri, scope);
+    const offsetOf = ({ line, character }: { line: number; character: number }) => Math.min(view.state.doc.line(line + 1).to, view.state.doc.line(line + 1).from + character);
+    view.dispatch({ changes: edits.map(({ range, newText }) => ({ from: offsetOf(range.start), to: offsetOf(range.end), insert: newText })), userEvent: "input.applyAll" });
+    return edits.length;
+  };
+
+  const runApplyAll = async ({ scope, label, total, fixable }: PendingApplyAll, mode: ApplyAllMode) => {
+    setApplyAll(null);
+    try {
+      const fixed = await applyFixes(scope);
+      setNotice(`Applied ${plural(fixed, "fix", "fixes")} for ${label}.`);
+      if (mode === "fixesAndRewrites" && total > fixable && activeDocument) {
+        await startAction("lint.rewriteAll", { documentId: activeDocument.id, scope }, `Rewrite the rest of ${label} with AI`);
+      }
+    } catch (cause) {
+      setNotice(`Apply all failed: ${cause instanceof Error ? cause.message : String(cause)}`);
+    }
+  };
+
+  const startRewriteAll = () => askApplyAll({}, "this document");
 
   const novelState = session?.novel ?? null;
   const activeJobs = Object.values(jobs).filter((job) => job.sessionId === session?.id);
@@ -455,7 +497,7 @@ export const App = () => {
               <span className="grow" />
               {(session.template === "tweet" || session.template === "article") && activeDocument && <button className="small" onClick={regenerate}>Generate…</button>}
               {activeDocument && <button className="small" onClick={() => void startAction("lint.rewrite", { documentId: activeDocument.id, start: selection[0], end: selection[1] }, hasSelection ? "Rewrite selection with AI" : "Rewrite paragraph with AI")}>{hasSelection ? "Rewrite selection" : "Rewrite ¶"}</button>}
-              {activeDocument && <button className="small" onClick={startRewriteAll} title="Rewrite every paragraph with style issues">Rewrite all</button>}
+              {activeDocument && <button className="small" onClick={startRewriteAll} title="Apply every exact fix, and optionally rewrite the rest with AI">Apply all…</button>}
               {activeDocument && <button className="small" onClick={() => void factCheck()}>Fact-check</button>}
               {activeDocument && <button className="small" onClick={() => void lspRef.current?.relint(uri ?? "")}>Re-lint</button>}
               <button className="small" aria-expanded={panelOpen} aria-controls="side-panel" onClick={togglePanel} title="Show or hide the issues panel">{panelOpen ? "Hide panel" : `Issues (${editorDiagnostics.length}) ▸`}</button>
@@ -522,13 +564,14 @@ export const App = () => {
                       onIgnoreInstance: (rule, from, to) => void ignoreInstance(rule, from, to),
                       onIgnoreCase: diagnosticHandlers.onIgnoreCase,
                       onDisableRule: diagnosticHandlers.onDisableRule,
+                      onApplyAll: askApplyAll,
                     }}
                     ignoredCount={(uri && settings?.ignoredInstances[uri]?.length) || 0}
                     onRestore={() => void restoreInstances()}
                   />
                 }
                 onJump={jumpTo}
-                hasSelection={hasSelection} onRewrite={() => activeDocument && void startAction("lint.rewrite", { documentId: activeDocument.id, start: selection[0], end: selection[1] }, "Rewrite with AI")} onRewriteAll={startRewriteAll} onFactCheck={() => void factCheck()} />
+                hasSelection={hasSelection} onRewrite={() => activeDocument && void startAction("lint.rewrite", { documentId: activeDocument.id, start: selection[0], end: selection[1] }, "Rewrite with AI")} onApplyAll={startRewriteAll} onFactCheck={() => void factCheck()} />
               <FactCheckHistory session={session} version={auditVersion} onSelect={(run: FactCheckRun) => setFindings(run.findings)} />
             </>
           )}
@@ -574,6 +617,7 @@ export const App = () => {
       {dialog === "new" && <NewSessionDialog promptMax={rules.promptMaxChars} onClose={() => setDialog(null)} onCreate={createSession} />}
       {dialog === "settings" && settings && <SettingsDialog settings={settings} onClose={() => setDialog(null)} onSaved={(saved) => { setSettings(saved); setDialog(null); }} />}
       {pending && <CostDialog title={pending.title} estimate={pending.estimate} error={pending.error} onClose={() => setPending(null)} onConfirm={() => void confirmAction()} />}
+      {applyAll && <ApplyAllDialog request={applyAll} onChoose={(mode) => void runApplyAll(applyAll, mode)} onClose={() => setApplyAll(null)} />}
       {rewriteAll && <RewriteAllDialog rewrites={rewriteAll.rewrites} onClose={() => setRewriteAll(null)} onApply={applyRewriteAll} />}
       {rewrite && <RewriteDialog rewrite={rewrite} onClose={() => setRewrite(null)} onApply={applyRewrite} />}
       {confirmResearch && session && (

@@ -5,13 +5,13 @@ import type { EditorDiagnostic } from "../editor";
 import { useAsync } from "../hooks";
 import { EstimateView } from "./Dialogs";
 
-export const IssuesPanel = ({ diagnostics, findings, styleIssues, onJump, onRewrite, onRewriteAll, onFactCheck, hasSelection }: { diagnostics: EditorDiagnostic[]; findings: FactFinding[]; styleIssues: ReactNode; onJump: (from: number, to: number) => void; onRewrite: () => void; onRewriteAll: () => void; onFactCheck: () => void; hasSelection: boolean }) => (
+export const IssuesPanel = ({ diagnostics, findings, styleIssues, onJump, onRewrite, onApplyAll, onFactCheck, hasSelection }: { diagnostics: EditorDiagnostic[]; findings: FactFinding[]; styleIssues: ReactNode; onJump: (from: number, to: number) => void; onRewrite: () => void; onApplyAll: () => void; onFactCheck: () => void; hasSelection: boolean }) => (
   <div>
     <div className="panel-section">
       <h3 style={{ marginBottom: 6 }}>Style · {diagnostics.length}</h3>
       <div className="row" style={{ marginBottom: 8, flexWrap: "wrap" }}>
         <button className="small" onClick={onRewrite} title="Ask the model to rewrite the selected passage (or the paragraph at the cursor) fixing the listed issues">{hasSelection ? "Rewrite selection with AI" : "Rewrite paragraph with AI"}</button>
-        <button className="small" disabled={diagnostics.length === 0} onClick={onRewriteAll} title="Ask the model to rewrite every paragraph with style issues, one call per paragraph">Rewrite all issues with AI</button>
+        <button className="small" disabled={diagnostics.length === 0} onClick={onApplyAll} title="Apply every exact fix in the document, and optionally rewrite the rest with AI">Apply all…</button>
       </div>
       {styleIssues}
     </div>

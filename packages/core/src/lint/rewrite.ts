@@ -1,8 +1,9 @@
+import { problemsInScope, type Scope } from "@textoic/enlint-lsp/fixes";
 import {
+  chunksWithProblems,
   cleanedAnswer,
   outputTokensFor,
   passageAround,
-  passagesWithProblems,
   rejectionOf,
   rewriteMessages,
   styleGuide,
@@ -13,7 +14,7 @@ import type { PlannedCall } from "../cost.js";
 import type { LintIssue, Rewrite } from "../types.js";
 import type { LintService } from "./service.js";
 
-export type { Rewrite };
+export type { Rewrite, Scope };
 export { styleGuide };
 
 export interface RewriteRequest {
@@ -41,13 +42,17 @@ export const plannedRewriteCalls = async (request: RewriteRequest, issues: LintI
 
 const issuesWithin = (issues: LintIssue[], from: number, to: number) => issues.filter((issue) => issue.start >= from && issue.end <= to);
 
-const paragraphsWithIssues = (text: string, issues: LintIssue[]) => passagesWithProblems(text, issues as LintError[]);
+const scoped = (issues: LintIssue[], scope: Scope) => problemsInScope(issues as LintError[], scope) as LintIssue[];
 
-export const plannedRewriteAllCalls = (text: string, issues: LintIssue[]): PlannedCall[] =>
-  paragraphsWithIssues(text, issues).map(({ start, end }, index) => {
+const partsWithIssues = (text: string, issues: LintIssue[]) => chunksWithProblems(text, issues as LintError[]);
+
+export const plannedRewriteAllCalls = (text: string, allIssues: LintIssue[], scope: Scope = {}): PlannedCall[] => {
+  const issues = scoped(allIssues, scope);
+  return partsWithIssues(text, issues).map(({ start, end }, index) => {
     const passage = text.slice(start, end);
-    return { stage: `rewrite paragraph ${index + 1}`, messages: messagesFor(passage, issuesWithin(issues, start, end), start), maxOutputTokens: outputTokensFor(passage) };
+    return { stage: `rewrite part ${index + 1}`, messages: messagesFor(passage, issuesWithin(issues, start, end), start), maxOutputTokens: outputTokensFor(passage) };
   });
+};
 
 export const rewritePassage = async (ctx: ActionContext, lint: LintService, request: RewriteRequest): Promise<Rewrite> => {
   const [from, to] = passageBounds(request.text, request.start, request.end);
@@ -58,12 +63,12 @@ export const rewritePassage = async (ctx: ActionContext, lint: LintService, requ
   return rewrite;
 };
 
-export const rewriteAllPassages = async (ctx: ActionContext, lint: LintService, text: string): Promise<Rewrite[]> => {
-  const issues = await lint.lint(text);
-  const spans = paragraphsWithIssues(text, issues);
+export const rewriteAllPassages = async (ctx: ActionContext, lint: LintService, text: string, scope: Scope = {}): Promise<Rewrite[]> => {
+  const issues = scoped(await lint.lint(text), scope);
+  const spans = partsWithIssues(text, issues);
   const rewrites: Rewrite[] = [];
   for (const [index, { start, end }] of spans.entries()) {
-    ctx.progress({ step: `rewriting paragraph ${index + 1} of ${spans.length}`, done: index, total: spans.length });
+    ctx.progress({ step: `rewriting part ${index + 1} of ${spans.length}`, done: index, total: spans.length });
     rewrites.push(await rewriteSpan(ctx, lint, text, [start, end], issuesWithin(issues, start, end)));
   }
 

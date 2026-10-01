@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import { defaultSettings, mergeSettings } from "../src/settings.js";
 import { LintService, ruleDefaults } from "../src/lint/service.js";
 import type { Settings } from "../src/types.js";
+import { plannedRewriteAllCalls } from "../src/lint/rewrite.js";
 
 const PASSIVE = "The report was written by the committee.";
 
@@ -38,5 +39,23 @@ describe("linter", () => {
   it("reads settings saved before the lint config existed", async () => {
     const legacy = serviceWith({ lintRules: { "no-passive-sentences": false } });
     assert.ok(!(await legacy.lint(PASSIVE)).some((issue) => issue.id === "no-passive-sentences"));
+  });
+});
+
+describe("rewrite all", () => {
+  it("plans one call for nearby paragraphs and only for the problems in the scope", async () => {
+    const text = `${PASSIVE}
+
+Clean.
+
+At the end of the day it was fine.`;
+    const issues = await serviceWith().lint(text);
+    const everything = plannedRewriteAllCalls(text, issues);
+    assert.equal(everything.length, 1);
+    assert.equal(everything[0].stage, "rewrite part 1");
+    const passiveOnly = plannedRewriteAllCalls(text, issues, { rule: "no-passive-sentences" });
+    const prompt = passiveOnly[0].messages.at(-1)?.content ?? "";
+    assert.ok(prompt.includes("written by the committee"));
+    assert.ok(!prompt.includes("At the end of the day\":"), "the filler is out of scope, so it is not listed as a problem");
   });
 });

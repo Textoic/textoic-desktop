@@ -5,7 +5,7 @@ import { cachedBrief, explore } from "../context/explorer.js";
 import type { ContextService } from "../context/store.js";
 import { estimateFor, type PlannedCall } from "../cost.js";
 import { plannedFactCheckCalls, type FactCheckService } from "../factcheck/service.js";
-import { plannedRewriteAllCalls, plannedRewriteCalls, rewriteAllPassages, rewritePassage } from "../lint/rewrite.js";
+import { plannedRewriteAllCalls, plannedRewriteCalls, rewriteAllPassages, rewritePassage, type Scope } from "../lint/rewrite.js";
 import type { LintService } from "../lint/service.js";
 import type { Provider } from "../providers/types.js";
 import type { ResearchService } from "../research/service.js";
@@ -67,6 +67,14 @@ type Params = Record<string, unknown>;
 
 const stringParam = (params: Params, key: string, fallback = ""): string =>
   typeof params[key] === "string" ? (params[key] as string) : fallback;
+
+const scopeParam = (params: Params): Scope => {
+  const scope = (params.scope ?? {}) as Record<string, unknown>;
+  return {
+    ...(typeof scope.rule === "string" ? { rule: scope.rule } : {}),
+    ...(typeof scope.case === "string" ? { case: scope.case } : {}),
+  };
+};
 
 const numberParam = (params: Params, key: string, fallback: number): number =>
   typeof params[key] === "number" && Number.isFinite(params[key] as number) ? (params[key] as number) : fallback;
@@ -356,18 +364,18 @@ export const rewriteAction: ActionDefinition = {
 
 export const rewriteAllAction: ActionDefinition = {
   name: "lint.rewriteAll",
-  describe: "Rewrite every paragraph of the document that has style issues, one model call per paragraph.",
+  describe: "Rewrite the parts of the document that have style issues (optionally only one rule or case), about 500 words per model call.",
   async estimate(deps, provider, sessionId, params) {
     const document = await deps.sessions.getDocument(sessionId, stringParam(params, "documentId"));
-    const calls = plannedRewriteAllCalls(document.content, await deps.lint.lint(document.content));
-    return estimateFor(provider, calls, calls.length === 0 ? "No style issues to rewrite; nothing will be spent." : `One call per paragraph with issues: ${calls.length}.`);
+    const calls = plannedRewriteAllCalls(document.content, await deps.lint.lint(document.content), scopeParam(params));
+    return estimateFor(provider, calls, calls.length === 0 ? "No style issues to rewrite; nothing will be spent." : `One call per part of about 500 words with issues: ${calls.length}.`);
   },
   async run(ctx, deps, sessionId, params) {
     const document = await deps.sessions.getDocument(sessionId, stringParam(params, "documentId"));
-    const rewrites = await rewriteAllPassages(ctx, deps.lint, document.content);
+    const rewrites = await rewriteAllPassages(ctx, deps.lint, document.content, scopeParam(params));
     const passed = rewrites.filter((rewrite) => rewrite.accepted).length;
     return {
-      summary: `Proposed rewrites for ${rewrites.length} paragraph(s); ${passed} passed the style check`,
+      summary: `Proposed rewrites for ${rewrites.length} part(s); ${passed} passed the style check`,
       action: "lint.rewriteAll",
       target: { type: "document", id: document.id, title: document.title },
       result: { rewriteAll: { rewrites, documentId: document.id, documentHash: document.contentHash } },

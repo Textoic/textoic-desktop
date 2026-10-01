@@ -19,6 +19,10 @@ web (React + CodeMirror)  ──HTTP /api──▶  server (Hono)  ──▶  co
 
 ## Decisions
 
+### 2026-09-30 — "Apply all" fixes in the editor, rewrites through the costed job
+
+The exact fixes come from the language server (`enlint/fixAll` over the `/lsp` socket), which already holds the text the editor shows, and go into CodeMirror as one transaction. They save like typing and appear in the audit log as a human edit, because nothing about them is AI. The AI half reuses `lint.rewriteAll` with a `scope` param (`{ rule?, case? }`), so it gets the cost estimate, the job bar's progress ("rewriting part 2 of 5") and the audit trace for free. That action now plans parts of about 500 words with `chunksWithProblems` from enlint-lsp instead of one call per paragraph.
+
 ### 2026-09-29 — the issues panel reads LSP diagnostics; ignored instances live in settings
 
 The Issues tab lists style issues from the raw LSP diagnostics (rule, case and fixes ride in `data`), not from the CodeMirror diagnostics, which carry only a message. "In view" means the lines on screen: the editor reports them from `documentTop` and `lineBlockAtHeight` on scroll, resize and view updates, once per animation frame, because `visibleRanges` includes CodeMirror's render margin. "By type" groups with enlint-lsp's `groupedByRule`, largest group first; groups collapse in component state.

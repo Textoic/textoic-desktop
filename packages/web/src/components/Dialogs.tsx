@@ -1,7 +1,9 @@
 import type { CostEstimate, ModelInfo, ProviderKind, Rewrite, TemplateKind, TemplateSettings } from "@textoic/core/types";
 import type { TextoicConfig } from "@textoic/enlint-lsp/config";
+import { wordDiff } from "@textoic/enlint-lsp/diff";
+import type { ApplyAllMode } from "@textoic/enlint-lsp/fixes";
 import { RulesEditor } from "./RulesEditor";
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { api, formatTokens, formatUsd, type RedactedSettings } from "../api";
 
 export const Modal = ({ title, children, onClose, wide }: { title: string; children: ReactNode; onClose: () => void; wide?: boolean }) => (
@@ -267,6 +269,48 @@ export const CostDialog = ({ title, estimate, error, onClose, onConfirm, childre
   </Modal>
 );
 
+const plural = (count: number, word: string, many = `${word}s`) => `${count} ${count === 1 ? word : many}`;
+
+export const Diff = ({ before, after }: { before: string; after: string }) => {
+  const parts = useMemo(() => wordDiff(before, after), [before, after]);
+  return (
+    <div className="word-diff">
+      {parts.map(({ kind, text }, index) => (kind === "removed" ? <del key={index}>{text}</del> : kind === "added" ? <ins key={index}>{text}</ins> : <span key={index}>{text}</span>))}
+    </div>
+  );
+};
+
+const verdictOf = (rewrite: Rewrite) =>
+  !rewrite.accepted ? <span className="badge bad">not recommended: {rewrite.reason}</span> : rewrite.after.length > 0 ? <span>{plural(rewrite.after.length, "style issue")} left after the rewrite</span> : null;
+
+export interface ApplyAllRequest {
+  label: string;
+  total: number;
+  fixable: number;
+}
+
+export const ApplyAllDialog = ({ request, onChoose, onClose }: { request: ApplyAllRequest; onChoose: (mode: ApplyAllMode) => void; onClose: () => void }) => {
+  const rest = request.total - request.fixable;
+  return (
+    <Modal title={`Apply all: ${request.label}`} onClose={onClose}>
+      <div className="muted" style={{ marginBottom: 12 }}>{plural(request.total, "issue")}: {request.fixable} with an exact fix, {rest} that only a rewrite can fix.</div>
+      <div className="list">
+        <button className="choice" disabled={request.fixable === 0} onClick={() => onChoose("fixes")}>
+          <strong>Fixes only</strong>
+          <span className="small-text muted">Apply the {plural(request.fixable, "exact fix", "exact fixes")} now. No model call, and the audit log records it as your edit.</span>
+        </button>
+        <button className="choice" disabled={rest === 0} onClick={() => onChoose("fixesAndRewrites")}>
+          <strong>Fixes, then AI rewrites</strong>
+          <span className="small-text muted">Apply the fixes, then estimate and run a rewrite of the parts with the other {plural(rest, "issue")}, about 500 words per call. You pick which rewrites to keep.</span>
+        </button>
+      </div>
+      <div className="actions">
+        <button className="ghost" onClick={onClose}>Cancel</button>
+      </div>
+    </Modal>
+  );
+};
+
 export const RewriteDialog = ({ rewrite, onClose, onApply }: { rewrite: Rewrite; onClose: () => void; onApply: () => Promise<void> }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -274,13 +318,10 @@ export const RewriteDialog = ({ rewrite, onClose, onApply }: { rewrite: Rewrite;
     <Modal title="AI rewrite" onClose={onClose} wide>
       <div className="rewrite">
         <div className="row small-text muted" style={{ marginBottom: 8 }}>
-          <span>Before: {rewrite.before.length} style issue{rewrite.before.length === 1 ? "" : "s"}</span>
-          <span>After: {rewrite.after.length}</span>
-          {!rewrite.accepted && <span className="badge bad">rejected: {rewrite.reason}</span>}
+          {verdictOf(rewrite)}
+          <span>Red is removed, green is added.</span>
         </div>
-        <div className="before">{rewrite.original}</div>
-        <div style={{ height: 8 }} />
-        <div className="after">{rewrite.replacement || "(empty)"}</div>
+        {rewrite.replacement === "" ? <div className="before">{rewrite.original}</div> : <Diff before={rewrite.original} after={rewrite.replacement} />}
       </div>
       {error && <div className="error">{error}</div>}
       <div className="actions">
@@ -308,13 +349,11 @@ export const RewriteDialog = ({ rewrite, onClose, onApply }: { rewrite: Rewrite;
 const RewriteAllItem = ({ rewrite, chosen, onToggle }: { rewrite: Rewrite; chosen: boolean; onToggle: () => void }) => (
   <div className="rewrite" style={{ marginBottom: 10 }}>
     <label className="row small-text muted" style={{ marginBottom: 8 }}>
-      <input type="checkbox" checked={chosen} disabled={rewrite.replacement === ""} onChange={onToggle} />
-      <span>Before: {rewrite.before.length} · After: {rewrite.after.length}</span>
-      {!rewrite.accepted && <span className="badge bad">rejected: {rewrite.reason}</span>}
+      <input type="checkbox" checked={chosen} disabled={rewrite.replacement === "" || rewrite.replacement === rewrite.original} onChange={onToggle} />
+      <span>Use this rewrite</span>
+      {rewrite.replacement === rewrite.original ? <span>The model left this part as it was</span> : verdictOf(rewrite)}
     </label>
-    <div className="before">{rewrite.original}</div>
-    <div style={{ height: 8 }} />
-    <div className="after">{rewrite.replacement || "(empty)"}</div>
+    {rewrite.replacement === "" || rewrite.replacement === rewrite.original ? <div className="before">{rewrite.original}</div> : <Diff before={rewrite.original} after={rewrite.replacement} />}
   </div>
 );
 
@@ -332,7 +371,7 @@ export const RewriteAllDialog = ({ rewrites, onClose, onApply }: { rewrites: Rew
   });
   return (
     <Modal title="Rewrite all issues" onClose={onClose} wide>
-      {rewrites.length === 0 ? <div className="empty">No paragraph had style issues.</div> : rewrites.map((rewrite, index) => <RewriteAllItem key={rewrite.start} rewrite={rewrite} chosen={chosen.has(index)} onToggle={() => toggle(index)} />)}
+      {rewrites.length === 0 ? <div className="empty">No part had style issues.</div> : rewrites.map((rewrite, index) => <RewriteAllItem key={rewrite.start} rewrite={rewrite} chosen={chosen.has(index)} onToggle={() => toggle(index)} />)}
       {error && <div className="error">{error}</div>}
       <div className="actions">
         <button className="ghost" onClick={onClose}>Discard</button>

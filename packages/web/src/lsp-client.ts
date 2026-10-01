@@ -1,4 +1,5 @@
-import { Methods, type DiagnosticData, type LintStats, type RelintResult } from "@textoic/enlint-lsp/protocol";
+import type { Scope } from "@textoic/enlint-lsp/fixes";
+import { Methods, type DiagnosticData, type FixAllResult, type LintStats, type RelintResult } from "@textoic/enlint-lsp/protocol";
 
 export interface LspDiagnostic {
   range: { start: { line: number; character: number }; end: { line: number; character: number } };
@@ -140,6 +141,10 @@ export class LspClient {
 
   relint(uri: string) {
     return this.request<RelintResult>(Methods.relint, { uri });
+  }
+
+  fixAll(uri: string, scope: Scope) {
+    return this.request<FixAllResult>(Methods.fixAll, { uri, scope });
   }
 
   dispose() {
