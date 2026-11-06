@@ -106,6 +106,15 @@ export const NovelPanel = ({ sessionId, novel, onGenerate, onTestChapter, onSave
           {(dirty || saving) && <span className="small-text muted">{saving ? "Saving…" : "Unsaved edits"}</span>}
         </div>
         {error && <div className="error small-text">{error}</div>}
+        {novel.blueprintReview && <details className="small-text">
+          <summary>Model blueprint review: {novel.blueprintReview.status === "passed" ? "no remaining findings" : "needs your review"}</summary>
+          <p>The model reviewed its edits in {novel.blueprintReview.rounds.length} rounds. Your approval is still required.</p>
+          {novel.blueprintReview.rounds.map((round, index) => <div key={index}>
+            <h4>Round {index + 1}{round.applied ? " (edits applied)" : ""}</h4>
+            {round.error && <p>{round.error}</p>}
+            <ul>{round.findings.map((finding, at) => <li key={at}>{finding.path.join(".")}: {finding.reason}<br />References: {finding.references.join(", ")}{finding.after !== null && <details><summary>Suggested edit</summary><p>{finding.after}</p></details>}</li>)}</ul>
+          </div>)}
+        </details>}
       </div>
 
       {coreElements && (

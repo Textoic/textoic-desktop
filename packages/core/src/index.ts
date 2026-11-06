@@ -42,4 +42,6 @@ export { generateArticle, ARTICLE_MIN_WORDS, ARTICLE_MAX_WORDS } from "./templat
 export { generateBlueprintSteps, remainingSteps, isStepDone } from "./templates/novel/blueprint.js";
 export { generateChapter } from "./templates/novel/chapter.js";
 export { renderBlueprint } from "./templates/novel/render.js";
+export { reviewPromptBlueprint } from "./templates/novel/review.js";
+export { reviewEditLoop, applyReviewFindings } from "./templates/novel/review-loop.js";
 export { countWords, estimateTokens, sha256, titleFromText, TextoicError } from "./util.js";

@@ -1,6 +1,8 @@
 import type { z } from "zod";
 import type { ActionContext } from "../../actions/context.js";
 import type { PlannedCall } from "../../cost.js";
+import { reviewPromptBlueprint } from "./review.js";
+import { REVIEW_MAX_EDITS, REVIEW_OUTPUT_TOKENS, type BlueprintReviewReport } from "./review-loop.js";
 import {
   BLUEPRINT_STEPS,
   type BlueprintStep,
@@ -147,6 +149,11 @@ export const plannedBlueprintCalls = (
     }
   }
 
+  if (steps.length > 0) {
+    for (let round = 0; round <= REVIEW_MAX_EDITS; round += 1) {
+      planned.push({ stage: `blueprint:review ${round + 1}`, inputTokens: estimateMessageTokens(messagesFor(SINGLE_STEPS[0], settings, blueprint)) + planned.length * 2000, maxOutputTokens: REVIEW_OUTPUT_TOKENS });
+    }
+  }
   return planned;
 };
 
@@ -156,6 +163,7 @@ export const generateBlueprintSteps = async (
   initial: NovelBlueprint,
   steps: BlueprintStep[],
   onStep?: (blueprint: NovelBlueprint, step: BlueprintStep) => Promise<void>,
+  onReview?: (report: BlueprintReviewReport) => Promise<void>,
 ): Promise<NovelBlueprint> => {
   let blueprint = initial;
   const total = steps.length;
@@ -177,6 +185,12 @@ export const generateBlueprintSteps = async (
     await onStep?.(blueprint, step);
   }
 
+  if (steps.length > 0) {
+    const reviewed = await reviewPromptBlueprint(ctx, { settings, blueprint, initial, steps });
+    blueprint = reviewed.value;
+    await onReview?.(reviewed.report);
+    await onStep?.(blueprint, steps[steps.length - 1]);
+  }
   ctx.progress({ step: "blueprint: done", done: total, total });
   return blueprint;
 };

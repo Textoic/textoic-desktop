@@ -1,5 +1,8 @@
 import type { TextoicConfig } from "@textoic/enlint-lsp/config";
 import type { IgnoredInstance, IgnoredInstances } from "@textoic/enlint-lsp/issues";
+import type { BlueprintReviewReport } from "./templates/novel/review-loop.js";
+
+export type { BlueprintReviewReport, BlueprintReviewRound, BlueprintFinding } from "./templates/novel/review-loop.js";
 
 export type { IgnoredInstance, IgnoredInstances, TextoicConfig };
 
@@ -453,6 +456,7 @@ export interface NovelState {
   settings: NovelSettings;
   blueprint: NovelBlueprint;
   approved: boolean;
+  blueprintReview?: BlueprintReviewReport;
   updatedAt: string;
   testChapter?: {
     documentId: string;

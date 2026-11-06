@@ -188,21 +188,22 @@ export const blueprintAction: ActionDefinition = {
   async estimate(deps, provider, sessionId, params) {
     const novel = await novelOf(deps, sessionId);
     const steps = stepsOf(params, novel);
-    return estimateFor(provider, plannedBlueprintCalls(novel.settings, novel.blueprint, steps), `Steps: ${steps.join(", ")}. Chapter outlines depend on how many parts the model plans.`);
+    return estimateFor(provider, plannedBlueprintCalls(novel.settings, novel.blueprint, steps), `Steps: ${steps.join(", ")}. Chapter outlines depend on how many parts the model plans. Includes up to three review calls; a clean review ends the loop early.`);
   },
   async run(ctx, deps, sessionId, params) {
     const novel = await novelOf(deps, sessionId);
     const steps = stepsOf(params, novel);
+    let blueprintReview: NovelState["blueprintReview"];
     const blueprint = await generateBlueprintSteps(ctx, novel.settings, novel.blueprint, steps, async (progress) => {
-      await deps.sessions.saveNovelProgress(sessionId, { ...novel, blueprint: progress, approved: false });
-    });
+      await deps.sessions.saveNovelProgress(sessionId, { ...novel, blueprint: progress, blueprintReview, approved: false });
+    }, async (report) => { blueprintReview = report; });
     await deps.sessions.setNovel(
       sessionId,
-      { ...novel, blueprint, approved: false },
+      { ...novel, blueprint, blueprintReview, approved: false },
       { actor: { kind: "ai", provider: ctx.provider.kind, model: ctx.provider.model }, action: "novel.blueprint", summary: `AI generated blueprint sections: ${steps.join(", ")}`, ai: ctx.trace },
       novel,
     );
-    return { summary: `Generated blueprint sections: ${steps.join(", ")}`, action: "novel.blueprint", target: { type: "blueprint", id: sessionId, title: "Novel blueprint" }, result: { steps } };
+    return { summary: `Generated blueprint sections: ${steps.join(", ")}; review ${blueprintReview?.status}`, action: "novel.blueprint", target: { type: "blueprint", id: sessionId, title: "Novel blueprint" }, result: { steps, blueprintReview } };
   },
 };
 

@@ -22,6 +22,7 @@ const scene = Array.from({ length: 420 }, (_, index) => `word${index}`).join(" "
 
 const script = (request: { messages: { role: string; content: string }[]; json?: unknown }) => {
   const user = lastUserMessage(request as never);
+  if (user.includes("Candidate blueprint:")) return JSON.stringify({ findings: [] });
   const key = Object.keys(answers).find((phrase) => user.includes(phrase));
   if (key) {
     return JSON.stringify(answers[key]);

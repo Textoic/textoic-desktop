@@ -315,7 +315,8 @@ export class SessionService {
     const baseline = previous ?? session.novel;
     const before = baseline ? renderBlueprint(baseline.blueprint, baseline.settings) : "";
     const after = renderBlueprint(novel.blueprint, novel.settings);
-    const updated: Session = { ...session, novel: { ...novel, updatedAt: now() }, updatedAt: now() };
+    const blueprintReview = meta.actor.kind === "human" && before !== after ? undefined : novel.blueprintReview;
+    const updated: Session = { ...session, novel: { ...novel, blueprintReview, updatedAt: now() }, updatedAt: now() };
     await this.storage.sessions.put(updated);
     if (before !== after) {
       await this.audit.recordTextChange({
